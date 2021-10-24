@@ -14,5 +14,18 @@ dirs = "4.*"
 thiserror = "1.*"
 env_logger = "0.9"
 log = "0.4"
+opentelemetry = { version = "0.16", features = ["metrics", "trace"] }
+tracing-opentelemetry = "0.15"
+tracing = "0.1"
+orbtk = { git = "https://github.com/AndiHofi/orbtk.git", branch = "develop" }
+orbclient = { git = "https://github.com/AndiHofi/orbclient.git", branch = "master" }
+
+[dependencies.tracing-subscriber]
+version = "0.2"
+features = ["registry"]
+default-features = false
+
+[profile.release]
+lto = true
 
 

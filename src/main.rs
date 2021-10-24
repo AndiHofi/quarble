@@ -1,4 +1,3 @@
-use log::*;
 use std::fs::OpenOptions;
 use std::io::{BufReader, Write};
 use std::path::PathBuf;
@@ -8,14 +7,42 @@ use std::time::SystemTime;
 
 use anyhow::{bail, Context};
 use chrono::{Duration, Local, NaiveDate};
+use opentelemetry::sdk::export::trace::stdout;
+use tracing::{debug, error, info, span};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::Registry;
 
 use crate::conf::settings::{Settings, SettingsSer};
 
 mod conf;
 mod data;
 mod db;
+mod ui;
 
 fn main() {
+    // Create a new OpenTelemetry pipeline
+    let tracer = stdout::new_pipeline()
+        .with_pretty_print(true)
+        .install_simple();
+
+    // Create a tracing layer with the configured tracer
+    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
+    // Use the tracing subscriber `Registry`, or any other subscriber
+    // that impls `LookupSpan`
+    let subscriber = Registry::default().with(telemetry);
+
+    // Trace executed code
+    tracing::subscriber::with_default(subscriber, || {
+        // Spans will be sent to the configured OpenTelemetry exporter
+        let root = span!(tracing::Level::DEBUG, "quarble", work_units = 2);
+        let _enter = root.enter();
+
+        main_inner();
+    });
+}
+
+fn main_inner() {
     env_logger::init();
     let args: Vec<String> = std::env::args().collect();
     let args_ref: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -38,6 +65,15 @@ fn main() {
     debug!("{:?}", settings);
     debug!("{:?}", args_ref);
 
+    let mut main_ui = match ui::Ui::new(ui::DisplaySelection::ByIndex(1)) {
+        Ok(ui) => ui,
+        Err(e) => {
+            error!("UI initialization failed: {:?}", e);
+            process::exit(3)
+        }
+    };
+    main_ui.show();
+
     if let Err(e) = do_write_settings(&settings) {
         error!("{:?}", e);
         process::exit(2);
@@ -52,6 +88,14 @@ fn do_write_settings(settings: &Settings) -> anyhow::Result<()> {
             .context("Missing settings location")?;
 
         info!("Writing settings to {}", location.display());
+
+        if let Some(dir) = location.parent() {
+            if !dir.is_dir() {
+                std::fs::create_dir_all(dir).with_context(|| {
+                    format!("Failed to create settings directory: {}", dir.display())
+                })?;
+            }
+        }
 
         let to_write = SettingsSer::from_settings(&settings);
         let buffer =
