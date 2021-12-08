@@ -1,7 +1,9 @@
 use anyhow::bail;
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct JiraIssue {
     ident: String,
+    description: Option<String>,
+    default_action: Option<String>,
 }
 
 impl JiraIssue {
@@ -9,15 +11,25 @@ impl JiraIssue {
         match id.split_once('-') {
             Some((project, number)) => {
                 if !project.chars().all(|ch| ch.is_ascii_alphabetic()) {
-                    bail!("Invalid Jira issue number, project ident is not ascii: {}", project);
+                    bail!(
+                        "Invalid Jira issue number, project ident is not ascii: {}",
+                        project
+                    );
                 }
 
                 if !number.chars().all(|ch| ch.is_ascii_digit()) {
-                    bail!("Invalid Jira issue number, issue number is not numeric: {}", number);
+                    bail!(
+                        "Invalid Jira issue number, issue number is not numeric: {}",
+                        number
+                    );
                 }
-                Ok(JiraIssue { ident: id.to_ascii_uppercase() })
+                Ok(JiraIssue {
+                    ident: id.to_ascii_uppercase(),
+                    description: None,
+                    default_action: None,
+                })
             }
-            None => bail!("Invalid Jira issue number: {}", id)
+            None => bail!("Invalid Jira issue number: {}", id),
         }
     }
 }

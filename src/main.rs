@@ -1,18 +1,23 @@
+use std::cell::RefCell;
 use std::fs::OpenOptions;
 use std::io::{BufReader, Write};
 use std::path::PathBuf;
 use std::process;
+use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use anyhow::{bail, Context};
+use arc_swap::ArcSwap;
 use chrono::{Duration, Local, NaiveDate};
 use opentelemetry::sdk::export::trace::stdout;
 use tracing::{debug, error, info, span};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
-use crate::conf::settings::{Settings, SettingsSer};
+use crate::conf::{InitialAction, MainAction, Settings, SettingsSer};
+use crate::data::{Day, WorkDay};
 
 mod conf;
 mod data;
@@ -42,7 +47,7 @@ fn main() {
     });
 }
 
-fn main_inner() {
+fn main_inner() -> anyhow::Result<()> {
     env_logger::init();
     let args: Vec<String> = std::env::args().collect();
     let args_ref: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -54,30 +59,32 @@ fn main_inner() {
         }
     };
 
-    match db::DB::init(&settings.db_dir) {
-        Ok(db) => info!("success"),
-        Err(e) => {
-            error!("{:?}", e);
-            process::exit(1);
-        }
-    }
+    let db = db::DB::init(&settings.db_dir)?;
 
     debug!("{:?}", settings);
     debug!("{:?}", args_ref);
 
-    let mut main_ui = match ui::Ui::new(ui::DisplaySelection::ByIndex(1)) {
-        Ok(ui) => ui,
-        Err(e) => {
-            error!("UI initialization failed: {:?}", e);
-            process::exit(3)
-        }
+    let work_day = if let Some(work_day) = db
+        .load_day(settings.active_date)? {
+        work_day
+    } else {
+        db.new_day(settings.active_date)?
     };
-    main_ui.show();
 
-    if let Err(e) = do_write_settings(&settings) {
+    let main_action = MainAction {
+        settings: Rc::new(ArcSwap::new(Arc::new(settings))),
+        initial_action: InitialAction::Book,
+        db,
+        work_day: Rc::new(RefCell::new(work_day)),
+    };
+    let settings_out = ui::show_ui(main_action);
+    let settings_out = settings_out.load();
+    if let Err(e) = do_write_settings(&settings_out) {
         error!("{:?}", e);
         process::exit(2);
     }
+
+    Ok(())
 }
 
 fn do_write_settings(settings: &Settings) -> anyhow::Result<()> {
@@ -180,7 +187,7 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
             db_dir: db_location(b.db_dir, from_file.as_ref())?,
             resolution: resolution(b.resolution_minutes, from_file.as_ref())?,
             write_settings: b.write_settings,
-            active_date: today(),
+            active_date: Day::today()
         },
         remaining_args,
     ))

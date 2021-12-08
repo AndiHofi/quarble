@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+use std::time::{Instant, SystemTime};
+use crate::data::Day;
 
 #[derive(Debug)]
 pub struct Settings {
@@ -6,7 +8,25 @@ pub struct Settings {
     pub db_dir: PathBuf,
     pub resolution: chrono::Duration,
     pub write_settings: bool,
-    pub active_date: chrono::NaiveDate,
+    pub active_date: Day,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            settings_location: None,
+            db_dir: Default::default(),
+            resolution: chrono::Duration::minutes(15),
+            write_settings: false,
+            active_date: Day::today(),
+        }
+    }
+}
+
+pub struct Story {
+    ident: String,
+    description: Option<String>,
+    default_action: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]

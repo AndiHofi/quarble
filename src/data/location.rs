@@ -1,10 +1,16 @@
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum Location {
     Office,
     Home,
     Other(OtherLocation)
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+impl Default for Location {
+    fn default() -> Self {
+        Location::Office
+    }
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct OtherLocation(pub Box<String>);
