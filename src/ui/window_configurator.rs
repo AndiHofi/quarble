@@ -1,3 +1,4 @@
+use iced_winit::settings::SettingsWindowConfigurator;
 use iced_winit::winit::dpi::PhysicalSize;
 use iced_winit::winit::event_loop::EventLoopWindowTarget;
 use iced_winit::winit::window::WindowBuilder;
@@ -11,15 +12,17 @@ pub enum DisplaySelection<'a> {
 
 #[derive(Debug)]
 pub struct MyWindowConfigurator<'a> {
+    pub base: SettingsWindowConfigurator,
     pub display_selection: DisplaySelection<'a>,
 }
 
-impl<'a, A> iced_winit::settings::WindowConfigurator<A> for MyWindowConfigurator<'a> {
+impl<'a, A> iced_winit::window_configurator::WindowConfigurator<A> for MyWindowConfigurator<'a> {
     fn configure_builder(
-        &self,
+        self,
         window_target: &EventLoopWindowTarget<A>,
         window_builder: WindowBuilder,
     ) -> WindowBuilder {
+        let window_builder = self.base.configure_builder(window_target, window_builder);
         let monitors: Vec<_> = window_target.available_monitors().collect();
         let monitor = match &self.display_selection {
             DisplaySelection::Largest => monitors

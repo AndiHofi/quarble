@@ -6,6 +6,7 @@ use anyhow::Result;
 use arc_swap::ArcSwap;
 use iced_wgpu::{Container, Row, Scrollable, Text};
 use iced_winit::renderer::Quad;
+use iced_winit::settings::SettingsWindowConfigurator;
 use iced_winit::widget::{scrollable, Column, Rule, Space};
 use iced_winit::winit::event_loop::EventLoopWindowTarget;
 use iced_winit::winit::platform::unix::{EventLoopWindowTargetExtUnix, WindowBuilderExtUnix};
@@ -16,23 +17,22 @@ use iced_winit::{Element, Mode};
 
 use crate::conf::{InitialAction, MainAction, Settings};
 use crate::data::WorkStart;
-use entry_edit::EntryEdit;
 use crate::ui::book::Book;
-use crate::ui::window_configurator::DisplaySelection;
-use crate::ui::Message::{UpdateDescription, UpdateEnd, UpdateStart};
+use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
 use crate::ui::work_entry_edit::WorkEntryEdit;
 use crate::ui::work_start_edit::WorkStartEdit;
+use crate::ui::Message::{UpdateDescription, UpdateEnd, UpdateStart};
+use entry_edit::EntryEdit;
 
-pub mod main_action;
-mod work_entry_edit;
-mod style;
-mod window_configurator;
-mod entry_edit;
-mod work_start_edit;
-mod util;
 mod book;
+mod entry_edit;
+pub mod main_action;
+mod style;
 mod time;
-
+mod util;
+mod window_configurator;
+mod work_entry_edit;
+mod work_start_edit;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -69,25 +69,24 @@ impl Default for Message {
 
 pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     let config_settings = main_action.settings.clone();
-    let settings = iced_winit::Settings {
-        id: Some("tmenu".to_string()),
-        window: Default::default(),
-        flags: main_action,
-        exit_on_close_request: true,
-        window_configurator: Some(Arc::new(window_configurator::MyWindowConfigurator {
-            display_selection: DisplaySelection::Largest,
-        })),
+    let window_configurator = MyWindowConfigurator {
+        base: SettingsWindowConfigurator {
+            window: Default::default(),
+            id: Some("quarble".to_string()),
+            mode: Mode::Windowed,
+        },
+        display_selection: DisplaySelection::Largest,
     };
-
     let renderer_settings = iced_wgpu::Settings {
         antialiasing: Some(iced_wgpu::settings::Antialiasing::MSAAx4),
         ..iced_wgpu::Settings::from_env()
     };
-    iced_winit::application::run::<
+    iced_winit::application::run_with_window_configurator::<
         Quarble,
         iced_futures::executor::ThreadPool,
         iced_wgpu::window::Compositor,
-    >(settings, renderer_settings)
+        _,
+    >(main_action, renderer_settings, window_configurator, true)
     .unwrap();
 
     config_settings
@@ -270,7 +269,6 @@ trait MainView {
 }
 
 type QElement<'a> = Element<'a, Message, <Quarble as iced_winit::Program>::Renderer>;
-
 
 struct ViewBookings {}
 
