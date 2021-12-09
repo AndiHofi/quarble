@@ -40,6 +40,7 @@ Mostly headless application that allows the most important actions:
 
 ## Long-term roadmap
 
+* [x] Filesystem based storage as Json files (1 file per week, current day is extra file). Formatted in a way that allows good diff integration.
 * [ ] Add support for recording work location (office / home office / business travel)
 * [ ] Fully featured command line API to simplify integration with other tools
 * [ ] Fully featured GUI that can trigger each action with a single button press
