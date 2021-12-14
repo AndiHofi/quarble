@@ -4,7 +4,7 @@ use crate::ui::work_entry_edit::WorkEntryEdit;
 use crate::ui::work_start_edit::WorkStartEdit;
 use crate::ui::Message::{UpdateDescription, UpdateEnd, UpdateStart};
 use crate::ui::{MainView, Message, QElement};
-use iced_winit::widget::{scrollable, Column, Row, Rule, Scrollable, Space, Text, TextInput};
+use iced_winit::widget::{scrollable, Column, Row, Rule, Scrollable, Space, Text};
 
 pub(super) struct Book {
     entries: Vec<Box<dyn EntryEdit>>,

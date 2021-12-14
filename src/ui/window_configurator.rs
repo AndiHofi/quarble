@@ -4,6 +4,7 @@ use iced_winit::winit::event_loop::EventLoopWindowTarget;
 use iced_winit::winit::window::WindowBuilder;
 
 #[derive(Debug, Copy, Clone)]
+#[allow(dead_code)]
 pub enum DisplaySelection<'a> {
     Largest,
     ByIndex(usize),

@@ -1,7 +1,5 @@
-use chrono::format::StrftimeItems;
-use chrono::NaiveDate;
 use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
 use crate::data::{Day, JiraIssue, WorkDay};
@@ -37,7 +35,7 @@ impl DB {
         } else if location.exists() {
             Err(DBErr::NotADirectory(location.display().to_string()))
         } else {
-            let mut buf = std::env::current_dir().unwrap().join(location);
+            let buf = std::env::current_dir().unwrap().join(location);
 
             log::info!("Creating database at {}", buf.display());
             if let Err(e) = std::fs::create_dir_all(location) {
@@ -100,9 +98,9 @@ impl DB {
             .open(&to_store)
             .map_err(|e| DBErr::CannotOpen(to_store.clone(), e))?;
 
-        let mut write = BufWriter::new(file);
+        let write = BufWriter::new(file);
         serde_json::to_writer_pretty(write, work_day)
-            .map_err(|e| DBErr::FailedToWrite(to_store.clone()))?;
+            .map_err(|_| DBErr::FailedToWrite(to_store.clone()))?;
 
         Ok(())
     }

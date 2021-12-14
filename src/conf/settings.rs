@@ -1,6 +1,5 @@
-use std::path::PathBuf;
-use std::time::{Instant, SystemTime};
 use crate::data::Day;
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct Settings {

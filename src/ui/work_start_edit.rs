@@ -6,7 +6,7 @@ use iced_winit::Length;
 
 pub struct WorkStartEdit {
     id: usize,
-    edit: bool,
+    _edit: bool,
     start_state: text_input::State,
     start: String,
     description_state: text_input::State,
@@ -17,7 +17,7 @@ impl WorkStartEdit {
     pub(crate) fn new(id: usize) -> Box<Self> {
         Box::new(Self {
             id,
-            edit: true,
+            _edit: true,
             start_state: Default::default(),
             start: "".to_string(),
             description_state: Default::default(),

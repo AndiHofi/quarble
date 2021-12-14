@@ -1,6 +1,4 @@
-use chrono::{Datelike, Duration, Weekday};
-use serde::de::{EnumAccess, MapAccess, SeqAccess};
-use serde::ser::Error;
+use chrono::{Datelike, Weekday};
 use serde::{Deserializer, Serializer};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;

@@ -9,23 +9,35 @@ pub enum Action {
     WorkEvent(WorkEvent),
     WorkStart(WorkStart),
     WorkEnd(WorkEnd),
-    DayStart {
-        location: Location,
-        ts: NaiveTime,
-    },
-    DayEnd {
-        location: Location,
-        ts: NaiveTime,
-    },
+    DayStart(DayStart),
+    DayEnd(DayEnd),
     DayOff,
-    ZA {
-        start: chrono::NaiveTime,
-        end: chrono::NaiveTime,
-    },
+    ZA(ZA),
     Vacation,
     Sick,
-    Doctor {
-        start: chrono::NaiveTime,
-        end: chrono::NaiveTime,
-    },
+    Doctor(Doctor),
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct ZA {
+    pub start: chrono::NaiveTime,
+    pub end: chrono::NaiveTime,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct DayStart {
+    pub location: Location,
+    pub ts: NaiveTime,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct DayEnd {
+    pub location: Location,
+    pub ts: NaiveTime,
+}
+
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct Doctor {
+    pub start: chrono::NaiveTime,
+    pub end: chrono::NaiveTime,
 }

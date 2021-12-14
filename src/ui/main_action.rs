@@ -1,9 +1,9 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-use arc_swap::ArcSwap;
 use crate::conf::Settings;
 use crate::data::WorkDay;
 use crate::db::DB;
+use arc_swap::ArcSwap;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct MainAction {
@@ -13,12 +13,12 @@ pub struct MainAction {
     pub work_day: Rc<RefCell<WorkDay>>,
 }
 
-
-
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum InitialAction {
     Book,
     Show,
+    FastStartDay,
 }
 
 impl Default for InitialAction {

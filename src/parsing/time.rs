@@ -1,16 +1,17 @@
-use crate::resolution;
-use std::cmp::Ordering;
+use std::fmt::Write;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroU32;
 use std::str::FromStr;
-use chrono::{NaiveTime, Timelike};
-use std::fmt::Write;
+
+use chrono::Timelike;
+
+use crate::parsing::time_relative::TimeRelative;
 
 #[derive(Clone, Debug)]
-pub(super) struct TimeLimit {
-    pub(super) min: Time,
-    pub(super) max: Time,
-    pub(super) resolution: NonZeroU32,
+pub struct TimeLimit {
+    pub min: Time,
+    pub max: Time,
+    pub resolution: NonZeroU32,
 }
 
 impl Default for TimeLimit {
@@ -27,9 +28,12 @@ impl TimeLimit {
     pub fn is_valid(&self, input: &str) -> TimeResult {
         if input.is_empty() {
             return TimeResult::Incomplete;
-        } else if input.len() > 5 {
+        } else if input.len() > 5 || input.starts_with('+') {
             return TimeResult::Invalid;
         } else if let Some((h, m)) = input.split_once(':') {
+            if m.starts_with('+') {
+                return TimeResult::Invalid;
+            }
             if m.is_empty() {
                 return TimeResult::Incomplete;
             }
@@ -37,6 +41,9 @@ impl TimeLimit {
                 return self.check_hm(h, m);
             }
         } else if let Some((h, p)) = input.split_once(&[',', '.'][..]) {
+            if p.starts_with('+') {
+                return TimeResult::Invalid;
+            }
             if p.is_empty() {
                 return TimeResult::Incomplete;
             }
@@ -57,7 +64,7 @@ impl TimeLimit {
     fn format_time(&self, t: TimeResult, input: &mut String) {
         if let TimeResult::Valid(t) = t {
             input.clear();
-            write!(input, "{}", t);
+            write!(input, "{}", t).unwrap();
         }
     }
 
@@ -65,17 +72,15 @@ impl TimeLimit {
         let result = self.is_valid(input.as_str());
         match &result {
             TimeResult::Invalid | TimeResult::Incomplete => result,
-            TimeResult::Valid(t) => {
-                TimeResult::Valid(t.round(mode, self.resolution))
-            }
-            TimeResult::TooEarly {min, ..} => {
+            TimeResult::Valid(t) => TimeResult::Valid(t.round(mode, self.resolution)),
+            TimeResult::TooEarly { min, .. } => {
                 if mode.is_sat() {
                     TimeResult::Valid(min.round(RoundMode::Up, self.resolution))
                 } else {
                     result
                 }
             }
-            TimeResult::TooLate {max, ..} => {
+            TimeResult::TooLate { max, .. } => {
                 if mode.is_sat() {
                     TimeResult::Valid(max.round(RoundMode::Down, self.resolution))
                 } else {
@@ -133,13 +138,30 @@ impl Time {
             debug_assert!(h < 24 || (h == 24 && m == 0));
             debug_assert!(m < 60);
             Time {
-                h: h as u8 + 1,
+                h: h as u8,
                 m: m as u8,
             }
         }
     }
     pub fn new(t: u32) -> Self {
         Self::hm(t / 60, t % 60)
+    }
+
+    pub fn try_add_relative(self, tr: TimeRelative) -> Option<Self> {
+        let mut h = self.h as i32 + tr.offset_hours();
+        let mut m = self.m as i32 + tr.offset_minutes();
+        if m < 0 {
+            m += 60;
+            h -= 1;
+        } else if m >= 60 {
+            m -= 60;
+            h += 1;
+        }
+        if h < 0 || h >= 24 || m < 0 || m >= 60 {
+            None
+        } else {
+            Some(Time::hm(h as u32, m as u32))
+        }
     }
 
     pub fn h(&self) -> u32 {
@@ -244,4 +266,19 @@ pub enum TimeResult {
     TooEarly { t: Time, min: Time },
     TooLate { t: Time, max: Time },
     Valid(Time),
+}
+
+#[cfg(test)]
+mod test {
+    use crate::parsing::time::Time;
+    use crate::parsing::time_relative::TimeRelative;
+
+    #[test]
+    fn sub_time() {
+        let time = Time::hm(1, 0);
+        assert_eq!(
+            time.try_add_relative(TimeRelative::new(true, 0, 1).unwrap()),
+            Some(Time::hm(0, 59))
+        );
+    }
 }

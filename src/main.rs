@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::cell::RefCell;
 use std::fs::OpenOptions;
 use std::io::{BufReader, Write};
@@ -10,19 +11,21 @@ use std::time::SystemTime;
 
 use anyhow::{bail, Context};
 use arc_swap::ArcSwap;
-use chrono::{Duration, Local, NaiveDate};
+use chrono::{Local, NaiveDate};
 use opentelemetry::sdk::export::trace::stdout;
 use tracing::{debug, error, info, span};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
 use crate::conf::{InitialAction, MainAction, Settings, SettingsSer};
-use crate::data::{Day, WorkDay};
+use crate::data::Day;
 
 mod conf;
 mod data;
 mod db;
+mod parsing;
 mod ui;
+mod util;
 
 fn main() {
     // Create a new OpenTelemetry pipeline
@@ -43,8 +46,9 @@ fn main() {
         let root = span!(tracing::Level::DEBUG, "quarble", work_units = 2);
         let _enter = root.enter();
 
-        main_inner();
-    });
+        main_inner()
+    })
+    .unwrap();
 }
 
 fn main_inner() -> anyhow::Result<()> {
@@ -64,8 +68,14 @@ fn main_inner() -> anyhow::Result<()> {
     debug!("{:?}", settings);
     debug!("{:?}", args_ref);
 
-    let work_day = if let Some(work_day) = db
-        .load_day(settings.active_date)? {
+    let initial_action = match args_ref {
+        ["day_start"] => InitialAction::FastStartDay,
+        ["book"] => InitialAction::Book,
+        ["show"] | [] => InitialAction::Show,
+        unexpected => bail!("Unexpected arguments: {}", unexpected.join(" ")),
+    };
+
+    let work_day = if let Some(work_day) = db.load_day(settings.active_date)? {
         work_day
     } else {
         db.new_day(settings.active_date)?
@@ -73,7 +83,7 @@ fn main_inner() -> anyhow::Result<()> {
 
     let main_action = MainAction {
         settings: Rc::new(ArcSwap::new(Arc::new(settings))),
-        initial_action: InitialAction::Book,
+        initial_action,
         db,
         work_day: Rc::new(RefCell::new(work_day)),
     };
@@ -130,7 +140,7 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
         db_dir: Option<PathBuf>,
         resolution_minutes: Option<String>,
         write_settings: bool,
-    };
+    }
 
     let mut b: SettingsBuilder = SettingsBuilder::default();
     loop {
@@ -187,7 +197,7 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
             db_dir: db_location(b.db_dir, from_file.as_ref())?,
             resolution: resolution(b.resolution_minutes, from_file.as_ref())?,
             write_settings: b.write_settings,
-            active_date: Day::today()
+            active_date: Day::today(),
         },
         remaining_args,
     ))

@@ -1,34 +1,22 @@
 use std::rc::Rc;
-use std::sync::{mpsc, Arc};
-use std::thread::current;
 
-use anyhow::Result;
 use arc_swap::ArcSwap;
-use iced_wgpu::{Container, Row, Scrollable, Text};
-use iced_winit::renderer::Quad;
+use iced_wgpu::Text;
 use iced_winit::settings::SettingsWindowConfigurator;
-use iced_winit::widget::{scrollable, Column, Rule, Space};
-use iced_winit::winit::event_loop::EventLoopWindowTarget;
-use iced_winit::winit::platform::unix::{EventLoopWindowTargetExtUnix, WindowBuilderExtUnix};
-use iced_winit::winit::window::WindowBuilder;
 use iced_winit::Event;
 use iced_winit::{event, Command, Subscription};
 use iced_winit::{Element, Mode};
 
 use crate::conf::{InitialAction, MainAction, Settings};
-use crate::data::WorkStart;
 use crate::ui::book::Book;
+use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
-use crate::ui::work_entry_edit::WorkEntryEdit;
-use crate::ui::work_start_edit::WorkStartEdit;
-use crate::ui::Message::{UpdateDescription, UpdateEnd, UpdateStart};
-use entry_edit::EntryEdit;
 
 mod book;
 mod entry_edit;
+mod fast_day_start;
 pub mod main_action;
 mod style;
-mod time;
 mod util;
 mod window_configurator;
 mod work_entry_edit;
@@ -60,6 +48,7 @@ pub enum Message {
         id: usize,
         input: String,
     },
+    FDS(FastDayStartMessage),
 }
 impl Default for Message {
     fn default() -> Self {
@@ -132,6 +121,13 @@ impl iced_winit::Program for Quarble {
                             break;
                         }
                     }
+                    CurrentView::FDS(fds) => {
+                        if let Some(f) = fds.update(m) {
+                            message = f;
+                        } else {
+                            break;
+                        }
+                    }
                     _ => break,
                 },
             }
@@ -144,6 +140,7 @@ impl iced_winit::Program for Quarble {
         match &mut self.current_view {
             CurrentView::Book(book) => book.view(&settings),
             CurrentView::Show(show) => show.view(&settings),
+            CurrentView::FDS(fds) => fds.view(&settings),
             CurrentView::Exit(exit) => exit.view(&settings),
         }
     }
@@ -156,6 +153,7 @@ impl iced_winit::Application for Quarble {
         let current_view = match flags.initial_action {
             InitialAction::Book => CurrentView::Book(Book::new()),
             InitialAction::Show => CurrentView::Show(Box::new(ViewBookings {})),
+            InitialAction::FastStartDay => CurrentView::FDS(FastDayStart::new()),
         };
 
         let settings = flags.settings;
@@ -205,7 +203,6 @@ fn global_keyboard_handler(event: Event, status: iced_winit::event::Status) -> O
 fn handle_control_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Message> {
     use iced_core::keyboard::KeyCode;
     use iced_winit::keyboard::Event::*;
-    use iced_winit::keyboard::Modifiers;
     match key_event {
         KeyPressed {
             key_code,
@@ -227,7 +224,6 @@ fn handle_control_keyboard_event(key_event: iced_winit::keyboard::Event) -> Opti
 fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Message> {
     use iced_core::keyboard::KeyCode;
     use iced_winit::keyboard::Event::*;
-    use iced_winit::keyboard::Modifiers;
     match key_event {
         KeyPressed {
             key_code,
@@ -257,6 +253,7 @@ fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Messa
 enum CurrentView {
     Book(Box<Book>),
     Show(Box<ViewBookings>),
+    FDS(Box<FastDayStart>),
     Exit(Exit),
 }
 
