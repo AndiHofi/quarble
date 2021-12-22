@@ -48,6 +48,15 @@ impl DB {
         }
     }
 
+    pub fn get_day(&self, day: Day) -> DBResult<WorkDay> {
+        let work_day = self.load_day(day)?;
+        if let Some(work_day) = work_day {
+            Ok(work_day)
+        } else {
+            self.new_day(day)
+        }
+    }
+
     pub fn new_day(&self, day: Day) -> DBResult<WorkDay> {
         let mut prev_day = day.prev_day();
         let mut remaining = 6;

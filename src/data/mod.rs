@@ -32,6 +32,10 @@ impl WorkDay {
         }
     }
 
+    pub fn get_day(&self) -> Day {
+        self.day
+    }
+
     pub fn active_issue(&self) -> Option<&JiraIssue> {
         self.active_issue.as_ref()
     }

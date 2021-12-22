@@ -3,11 +3,13 @@ use std::rc::Rc;
 use arc_swap::ArcSwap;
 use iced_wgpu::Text;
 use iced_winit::settings::SettingsWindowConfigurator;
-use iced_winit::Event;
 use iced_winit::{event, Command, Subscription};
 use iced_winit::{Element, Mode};
+use iced_winit::{Event, Program};
 
 use crate::conf::{InitialAction, MainAction, Settings};
+use crate::data::{Action, Day, WorkDay};
+use crate::db::DB;
 use crate::ui::book::Book;
 use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
@@ -49,6 +51,9 @@ pub enum Message {
         input: String,
     },
     FDS(FastDayStartMessage),
+    StoreAction(Action),
+    StoreSuccess,
+    Error(String),
 }
 impl Default for Message {
     fn default() -> Self {
@@ -84,6 +89,9 @@ pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
 pub struct Quarble {
     current_view: CurrentView,
     settings: Rc<ArcSwap<Settings>>,
+    db: DB,
+    active_day: Option<WorkDay>,
+    active_day_dirty: bool,
 }
 
 impl iced_winit::Program for Quarble {
@@ -91,44 +99,44 @@ impl iced_winit::Program for Quarble {
     type Message = Message;
 
     fn update(&mut self, mut message: Message) -> Command<Message> {
-        loop {
-            match message {
-                Message::Update => break,
+        let mut message = Some(message);
+        while let Some(current) = message.take() {
+            match current {
+                Message::Update => {}
+                Message::Error(msg) => eprintln!("Got an error: {}", msg),
                 Message::Exit => {
                     self.current_view = CurrentView::Exit(Exit);
-                    break;
                 }
                 Message::Book => {
                     if let CurrentView::Book(_) = &self.current_view {
                     } else {
                         self.current_view = CurrentView::Book(Book::new());
                     }
-                    break;
                 }
                 Message::View => {
                     if let CurrentView::Show(_) = &self.current_view {
                     } else {
                         self.current_view = CurrentView::Show(ViewBookings::new());
                     }
-                    break;
+                }
+                Message::StoreAction(action) => {
+                    if let Some(ref mut active_day) = self.active_day {
+                        active_day.add_action(action);
+                        message = match self.db.store_day(active_day.get_day(), active_day) {
+                            Ok(()) => Some(Message::StoreSuccess),
+                            Err(e) => Some(Message::Error(format!("{:?}", e))),
+                        };
+                    }
                 }
                 m => match &mut self.current_view {
                     CurrentView::Book(b) => {
                         eprintln!("Sending {:?} to book", &m);
-                        if let Some(f) = b.update(m) {
-                            message = f;
-                        } else {
-                            break;
-                        }
+                        message = b.update(m);
                     }
                     CurrentView::FDS(fds) => {
-                        if let Some(f) = fds.update(m) {
-                            message = f;
-                        } else {
-                            break;
-                        }
+                        message = fds.update(m);
                     }
-                    _ => break,
+                    _ => {}
                 },
             }
         }
@@ -150,21 +158,41 @@ impl iced_winit::Application for Quarble {
     type Flags = MainAction;
 
     fn new(flags: MainAction) -> (Self, Command<Message>) {
-        let current_view = match flags.initial_action {
-            InitialAction::Book => CurrentView::Book(Book::new()),
-            InitialAction::Show => CurrentView::Show(Box::new(ViewBookings {})),
-            InitialAction::FastStartDay => CurrentView::FDS(FastDayStart::new()),
+        let db = flags.db;
+
+        let (current_view, active_day) = match flags.initial_action {
+            InitialAction::Book => (CurrentView::Book(Book::new()), Ok(None)),
+            InitialAction::Show => (
+                CurrentView::Show(Box::new(ViewBookings {})),
+                db.get_day(Day::today()).map(Option::from),
+            ),
+            InitialAction::FastStartDay => (
+                CurrentView::FDS(FastDayStart::new()),
+                db.get_day(Day::today()).map(Option::from),
+            ),
         };
 
         let settings = flags.settings;
+        let (initial_message, active_day) = match active_day {
+            Ok(active_day) => (None, active_day),
+            Err(e) => (Some(Message::Error(format!("{:?}", e))), None),
+        };
 
-        (
-            Quarble {
-                current_view,
-                settings,
-            },
-            Command::none(),
-        )
+        let mut quarble = Quarble {
+            current_view,
+            settings,
+            db,
+            active_day,
+            active_day_dirty: false,
+        };
+
+        let command = if let Some(initial_message) = initial_message {
+            quarble.update(initial_message)
+        } else {
+            Command::none()
+        };
+
+        (quarble, command)
     }
 
     fn title(&self) -> String {
