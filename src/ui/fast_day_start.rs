@@ -3,7 +3,7 @@ use iced_wgpu::TextInput;
 use iced_winit::widget::{text_input, Column, Row, Space, Text};
 
 use crate::conf::Settings;
-use crate::data::{DayStart, Location};
+use crate::data::{Action, DayStart, Location, WorkDay};
 use crate::parsing::time::{Time, TimeLimit, TimeResult};
 use crate::parsing::time_relative::TimeRelative;
 use crate::ui::{style, MainView, Message, QElement};
@@ -18,14 +18,41 @@ pub(super) struct FastDayStart {
     text: String,
     text_state: text_input::State,
     value: Option<DayStart>,
+    message: String,
+    limits: Vec<TimeLimit>,
 }
 
 impl FastDayStart {
+    pub fn for_work_day(work_day: Option<&WorkDay>) -> Box<Self> {
+        let (message, limits) = if let Some(work_day) = work_day {
+            let mut actions = work_day.actions().to_vec();
+            actions.sort();
+        } else {
+            ("Start working day".to_string(), Vec::default())
+        };
+        Box::new(FastDayStart {
+            text: String::new(),
+            text_state: text_input::State::focused(),
+            value: Some(DayStart {
+                location: Location::Office,
+                ts: util::time_now(),
+            }),
+            message,
+            limits,
+        })
+    }
     fn update_text(&mut self, new_value: String) -> Option<Message> {
         self.text = new_value;
         self.value = parse_value(&self.text);
         None
     }
+}
+
+fn valid_time_limits_for_day_start(actions: &[Action]) -> Vec<TimeLimit> {
+    let mut result = Vec::new();
+    let mut current_limit = TimeLimit::default();
+
+    result
 }
 
 impl MainView for FastDayStart {
@@ -37,6 +64,8 @@ impl MainView for FastDayStart {
                 location: Location::Office,
                 ts: util::time_now(),
             }),
+            message: "Start working day".to_string(),
+            limits: Vec::default(),
         })
     }
 
@@ -46,17 +75,20 @@ impl MainView for FastDayStart {
             .as_ref()
             .map(|e| e.location.to_string())
             .unwrap_or("Invalid input".to_string());
+
         let time_str = self
             .value
             .as_ref()
             .map(|e| e.ts.to_string())
             .unwrap_or(String::new());
+
         Column::with_children(vec![
             Text::new("Day start: [h|o] [+|-]hours or minute").into(),
             Space::with_width(style::SPACE).into(),
             TextInput::new(&mut self.text_state, "now", &self.text, move |input| {
                 on_input_change(input)
             })
+            .on_submit(on_submit_message(self.value.as_ref()))
             .into(),
             Space::with_width(style::SPACE).into(),
             Row::with_children(vec![
@@ -74,6 +106,7 @@ impl MainView for FastDayStart {
             Message::FDS(msg) => match msg {
                 FastDayStartMessage::TextChanged(new_value) => self.update_text(new_value),
             },
+            Message::StoreSuccess => Some(Message::Exit),
             _ => None,
         }
     }
@@ -117,6 +150,14 @@ fn parse_value(text: &str) -> Option<DayStart> {
 
 fn on_input_change(text: String) -> Message {
     Message::FDS(FastDayStartMessage::TextChanged(text))
+}
+
+fn on_submit_message(value: Option<&DayStart>) -> Message {
+    if let Some(v) = value {
+        Message::StoreAction(Action::DayStart(v.clone()))
+    } else {
+        Message::Update
+    }
 }
 
 #[cfg(test)]

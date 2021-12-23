@@ -81,6 +81,8 @@ impl DB {
             prev_work_day.and_then(|w| w.active_issue().map(JiraIssue::clone)),
         );
 
+        eprintln!("New: {:?}", new_day);
+
         Ok(new_day)
     }
 
@@ -91,6 +93,7 @@ impl DB {
             let reader = BufReader::new(file);
             let work_day: WorkDay = serde_json::from_reader(reader)
                 .map_err(|e| DBErr::InvalidDBFile(to_load.clone(), e))?;
+            eprintln!("Loaded: {:?}", work_day);
             Ok(Some(work_day))
         } else {
             Ok(None)
@@ -111,6 +114,7 @@ impl DB {
         serde_json::to_writer_pretty(write, work_day)
             .map_err(|_| DBErr::FailedToWrite(to_store.clone()))?;
 
+        eprintln!("Stored: {:?}", work_day);
         Ok(())
     }
 
