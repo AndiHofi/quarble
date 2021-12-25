@@ -1,17 +1,17 @@
 use std::fmt::Write;
 use std::fmt::{Display, Formatter};
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroU8};
 use std::str::FromStr;
 
 use chrono::Timelike;
 
 use crate::parsing::time_relative::TimeRelative;
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct TimeLimit {
-    pub min: Time,
-    pub max: Time,
-    pub resolution: NonZeroU32,
+    min: Time,
+    max: Time,
+    resolution: NonZeroU8,
 }
 
 impl Default for TimeLimit {
@@ -19,12 +19,47 @@ impl Default for TimeLimit {
         Self {
             min: Time::hm(0, 0),
             max: Time::hm(23, 59),
-            resolution: NonZeroU32::new(15).unwrap(),
+            resolution: NonZeroU8::new(15).unwrap(),
         }
     }
 }
 
 impl TimeLimit {
+    pub const EMPTY: Self = Self {
+        min: Time::ZERO,
+        max: Time::ZERO,
+        resolution: unsafe { NonZeroU8::new_unchecked(1) },
+    };
+
+    pub fn simple(min: Time, max: Time) -> Self {
+        Self::new(min, max, 1)
+    }
+
+    pub fn new(min: Time, max: Time, resolution: u8) -> Self {
+        if min >= max {
+            Self::EMPTY
+        } else {
+            let resolution = NonZeroU8::new(resolution).unwrap();
+            Self {
+                min,
+                max,
+                resolution,
+            }
+        }
+    }
+
+    pub fn min(&self) -> Time {
+        self.min
+    }
+
+    pub fn max(&self) -> Time {
+        self.max
+    }
+
+    pub fn resolution(&self) -> NonZeroU8 {
+        self.resolution
+    }
+
     pub fn is_valid(&self, input: &str) -> TimeResult {
         if input.is_empty() {
             return TimeResult::Incomplete;
@@ -72,17 +107,17 @@ impl TimeLimit {
         let result = self.is_valid(input.as_str());
         match &result {
             TimeResult::Invalid | TimeResult::Incomplete => result,
-            TimeResult::Valid(t) => TimeResult::Valid(t.round(mode, self.resolution)),
+            TimeResult::Valid(t) => TimeResult::Valid(t.round(mode, self.resolution.into())),
             TimeResult::TooEarly { min, .. } => {
                 if mode.is_sat() {
-                    TimeResult::Valid(min.round(RoundMode::Up, self.resolution))
+                    TimeResult::Valid(min.round(RoundMode::Up, self.resolution.into()))
                 } else {
                     result
                 }
             }
             TimeResult::TooLate { max, .. } => {
                 if mode.is_sat() {
-                    TimeResult::Valid(max.round(RoundMode::Down, self.resolution))
+                    TimeResult::Valid(max.round(RoundMode::Down, self.resolution.into()))
                 } else {
                     result
                 }
@@ -116,6 +151,38 @@ impl TimeLimit {
             self.check_time(Time::hm(h, m))
         }
     }
+
+    pub fn split_at(&self, time: Time) -> (TimeLimit, TimeLimit) {
+        (self.with_max(time), self.with_min(time))
+    }
+
+    pub fn split(&self, exclude: TimeLimit) -> (TimeLimit, TimeLimit) {
+        (self.with_max(exclude.min), self.with_min(exclude.max))
+    }
+
+    pub fn with_min(self, new_min: Time) -> Self {
+        if new_min >= self.max {
+            TimeLimit::EMPTY
+        } else {
+            TimeLimit {
+                min: new_min,
+                max: self.max,
+                resolution: self.resolution,
+            }
+        }
+    }
+
+    pub fn with_max(self, new_max: Time) -> Self {
+        if new_max <= self.min {
+            TimeLimit::EMPTY
+        } else {
+            TimeLimit {
+                min: self.min,
+                max: new_max,
+                resolution: self.resolution,
+            }
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
@@ -124,7 +191,8 @@ pub struct Time {
     m: u8,
 }
 impl Time {
-    pub fn hm(h: u32, m: u32) -> Self {
+    pub const ZERO: Time = Time::hm(0, 0);
+    pub const fn hm(h: u32, m: u32) -> Self {
         if m == 60 {
             if h < 23 {
                 Time {
@@ -132,7 +200,7 @@ impl Time {
                     m: 0,
                 }
             } else {
-                panic!("{}:{}", h, m);
+                panic!("Invalid time");
             }
         } else {
             debug_assert!(h < 24 || (h == 24 && m == 0));
@@ -231,6 +299,12 @@ impl From<chrono::NaiveTime> for Time {
         } else {
             Time::hm(h, m)
         }
+    }
+}
+
+impl From<&chrono::NaiveTime> for Time {
+    fn from(n: &chrono::NaiveTime) -> Self {
+        From::<chrono::NaiveTime>::from(*n)
     }
 }
 

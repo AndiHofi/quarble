@@ -5,7 +5,7 @@ use crate::data::location::Location;
 use crate::data::work::{Work, WorkEnd, WorkEvent, WorkStart};
 use crate::parsing::time::Time;
 
-#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum Action {
     Work(Work),
     WorkEvent(WorkEvent),
@@ -22,6 +22,7 @@ pub enum Action {
 
 impl TimedAction for Action {
     fn times(&self) -> (Time, Option<Time>) {
+        let zero = NaiveTime::from_hms(0, 0, 0);
         let (start, end) = match self {
             Action::Work(Work { start, end, .. }) => (start, Some(end)),
             Action::WorkEvent(WorkEvent { ts, .. }) => (ts, None),
@@ -30,7 +31,7 @@ impl TimedAction for Action {
             Action::DayStart(DayStart { ts, .. }) => (ts, None),
             Action::DayEnd(DayEnd { ts, .. }) => (ts, None),
             Action::DayOff | Action::Vacation | Action::Sick => {
-                (NaiveTime::from_hms(0, 0, 0), None)
+                (&zero, None)
             }
             Action::ZA(ZA { start, end }) => (start, Some(end)),
             Action::Doctor(Doctor { start, end }) => (start, Some(end)),
@@ -41,6 +42,12 @@ impl TimedAction for Action {
 
 impl PartialOrd for Action {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Action {
+    fn cmp(&self, other: &Self) -> Ordering {
         let (self_start, self_end) = self.times();
         let (other_start, other_end) = other.times();
         let ord = self_start
@@ -51,33 +58,32 @@ impl PartialOrd for Action {
                 (Some(_), None) => Ordering::Greater,
                 (Some(s), Some(o)) => s.cmp(&o),
             });
-        Some(ord)
+        ord
     }
 }
 
-pub(super) trait TimedAction {
+pub trait TimedAction {
     fn times(&self) -> (Time, Option<Time>);
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug,  Eq, PartialEq,serde::Deserialize, serde::Serialize)]
 pub struct ZA {
     pub start: chrono::NaiveTime,
     pub end: chrono::NaiveTime,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug,  Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct DayStart {
     pub location: Location,
     pub ts: NaiveTime,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug,  Eq, PartialEq,serde::Deserialize, serde::Serialize)]
 pub struct DayEnd {
-    pub location: Location,
     pub ts: NaiveTime,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug,  Eq, PartialEq,serde::Deserialize, serde::Serialize)]
 pub struct Doctor {
     pub start: chrono::NaiveTime,
     pub end: chrono::NaiveTime,

@@ -11,12 +11,14 @@ use crate::conf::{InitialAction, MainAction, Settings};
 use crate::data::{Action, Day, WorkDay};
 use crate::db::DB;
 use crate::ui::book::Book;
+use crate::ui::fast_day_end::{FastDayEnd, FastDayEndMessage};
 use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
 
 mod book;
 mod entry_edit;
 mod fast_day_start;
+mod fast_day_end;
 pub mod main_action;
 mod style;
 mod util;
@@ -51,6 +53,7 @@ pub enum Message {
         input: String,
     },
     FDS(FastDayStartMessage),
+    FDE(FastDayEndMessage),
     StoreAction(Action),
     StoreSuccess,
     Error(String),
@@ -98,7 +101,7 @@ impl iced_winit::Program for Quarble {
     type Renderer = iced_wgpu::Renderer;
     type Message = Message;
 
-    fn update(&mut self, mut message: Message) -> Command<Message> {
+    fn update(&mut self, message: Message) -> Command<Message> {
         let mut message = Some(message);
         while let Some(current) = message.take() {
             match current {
@@ -136,6 +139,9 @@ impl iced_winit::Program for Quarble {
                     CurrentView::FDS(fds) => {
                         message = fds.update(m);
                     }
+                    CurrentView::FDE(fde) => {
+                        message = fde.update(m);
+                    }
                     _ => {}
                 },
             }
@@ -149,6 +155,7 @@ impl iced_winit::Program for Quarble {
             CurrentView::Book(book) => book.view(&settings),
             CurrentView::Show(show) => show.view(&settings),
             CurrentView::FDS(fds) => fds.view(&settings),
+            CurrentView::FDE(fde) => fde.view(&settings),
             CurrentView::Exit(exit) => exit.view(&settings),
         }
     }
@@ -160,22 +167,22 @@ impl iced_winit::Application for Quarble {
     fn new(flags: MainAction) -> (Self, Command<Message>) {
         let db = flags.db;
 
-        let (current_view, active_day) = match flags.initial_action {
-            InitialAction::Book => (CurrentView::Book(Book::new()), Ok(None)),
-            InitialAction::Show => (
-                CurrentView::Show(Box::new(ViewBookings {})),
-                db.get_day(Day::today()).map(Option::from),
-            ),
-            InitialAction::FastStartDay => (
-                CurrentView::FDS(FastDayStart::new()),
-                db.get_day(Day::today()).map(Option::from),
-            ),
-        };
-
         let settings = flags.settings;
+        let active_day = db.get_day(Day::today()).map(Option::from);
         let (initial_message, active_day) = match active_day {
             Ok(active_day) => (None, active_day),
             Err(e) => (Some(Message::Error(format!("{:?}", e))), None),
+        };
+
+        let current_view = match flags.initial_action {
+            InitialAction::Book => CurrentView::Book(Book::new()),
+            InitialAction::Show => CurrentView::Show(Box::new(ViewBookings {})),
+            InitialAction::FastStartDay => {
+                CurrentView::FDS(FastDayStart::for_work_day(active_day.as_ref()))
+            }
+            InitialAction::FastEndDay => {
+                CurrentView::FDE(FastDayEnd::for_work_day(active_day.as_ref()))
+            }
         };
 
         let mut quarble = Quarble {
@@ -282,6 +289,7 @@ enum CurrentView {
     Book(Box<Book>),
     Show(Box<ViewBookings>),
     FDS(Box<FastDayStart>),
+    FDE(Box<FastDayEnd>),
     Exit(Exit),
 }
 
