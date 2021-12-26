@@ -1,3 +1,4 @@
+use crate::parsing::parse_result::ParseResult;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -63,7 +64,7 @@ impl TimeRelative {
         self.m as i32
     }
 
-    pub fn parse_relaxed(input: &str) -> Option<(TimeRelative, &str)> {
+    pub fn parse_relaxed(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
         let (neg, input) = if input.starts_with('+') {
             (false, &input[1..])
         } else if input.starts_with('-') {
@@ -75,19 +76,22 @@ impl TimeRelative {
         Self::parse_body(neg, input)
     }
 
-    pub fn parse_prefix(input: &str) -> Option<(TimeRelative, &str)> {
+    pub fn parse_prefix(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
         let (neg, input) = if input.starts_with('+') {
             (false, &input[1..])
         } else if input.starts_with('-') {
             (true, &input[1..])
         } else {
-            return None;
+            return (ParseResult::None, input);
         };
 
-        Self::parse_body(neg, input)
+        match Self::parse_body(neg, input) {
+            (ParseResult::None, rest) => (ParseResult::Invalid(()), rest),
+            o => o
+        }
     }
 
-    fn parse_body(neg: bool, input: &str) -> Option<(TimeRelative, &str)> {
+    fn parse_body(neg: bool, input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
         #[derive(Debug)]
         enum Unit {
             H,
@@ -95,7 +99,13 @@ impl TimeRelative {
         }
         let (first_num, unit, input) = {
             let (head, tail) = str_split_at(input, |c: char| !c.is_ascii_digit());
-            let num: u8 = u8::from_str(head).ok()?;
+            if head.is_empty() {
+                return (ParseResult::None, tail);
+            }
+            let num: u8 = match u8::from_str(head) {
+                Ok(num) => num,
+                Err(_) => return (ParseResult::Invalid(()), tail),
+            };
             if tail.starts_with('h') {
                 (num, Unit::H, &tail[1..])
             } else if tail.starts_with('m') {
@@ -111,16 +121,19 @@ impl TimeRelative {
                 if tail.is_empty() || tail.starts_with(|c: char| c.is_ascii_whitespace()) {
                     (0, tail)
                 } else {
-                    return None;
+                    return (ParseResult::Invalid(()), tail);
                 }
             } else {
-                let num = u8::from_str(head).ok()?;
+                let num = match u8::from_str(head) {
+                    Ok(num) => num,
+                    Err(_) => return (ParseResult::Invalid(()), tail),
+                };
                 if tail.starts_with('m') {
                     (num, &tail[1..])
                 } else if tail.is_empty() || tail.starts_with(|c: char| c.is_ascii_whitespace()) {
                     (num, tail)
                 } else {
-                    return None;
+                    return (ParseResult::Invalid(()), tail);
                 }
             };
             check_h_m(neg, first_num, minutes, tail)
@@ -140,12 +153,16 @@ fn str_split_at<'a, P: FnMut(char) -> bool>(s: &str, p: P) -> (&str, &str) {
     }
 }
 
-fn check_h_m(neg: bool, h: u8, m: u8, tail: &str) -> Option<(TimeRelative, &str)> {
-    TimeRelative::new(neg, h, m).map(|tr| (tr, tail))
+fn check_h_m(neg: bool, h: u8, m: u8, tail: &str) -> (ParseResult<TimeRelative, ()>, &str) {
+    match TimeRelative::new(neg, h, m) {
+        Some(tr) => (ParseResult::Valid(tr), tail),
+        None => (ParseResult::Invalid(()), tail),
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::parsing::parse_result::ParseResult;
     use crate::parsing::time_relative::{str_split_at, TimeRelative};
 
     #[test]
@@ -211,10 +228,10 @@ mod test {
 
     fn assert_no_parse(v: &[&str]) -> Result<(), String> {
         for input in v {
-            if let Some(r) = TimeRelative::parse_relaxed(input) {
+            if let (ParseResult::Valid(r), tail) = TimeRelative::parse_relaxed(input) {
                 return Err(format!(
                     "Did not expect that '{}' parses into {} with tail '{}'",
-                    input, r.0, r.1
+                    input, r, tail
                 ));
             }
         }
@@ -223,9 +240,9 @@ mod test {
 
     fn assert_parse(v: &[(&str, &str, &str)]) -> Result<(), String> {
         for (input, expected, rest) in v {
-            let (parsed, tail) = TimeRelative::parse_relaxed(input)
-                .ok_or(format!("Could not parse {} into {}", input, expected))?;
-            let result = parsed.to_string();
+            let (parsed, tail) = TimeRelative::parse_relaxed(input);
+            parsed.as_ref().get().ok_or(format!("Could not parse {} into {}", input, expected))?;
+            let result = parsed.get().unwrap().to_string();
             if &result != expected {
                 return Err(format!(
                     "Parsed {} into {}, but expected {}",

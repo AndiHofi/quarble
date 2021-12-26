@@ -1,5 +1,5 @@
 use iced_winit::settings::SettingsWindowConfigurator;
-use iced_winit::winit::dpi::PhysicalSize;
+use iced_winit::winit::dpi::LogicalSize;
 use iced_winit::winit::event_loop::EventLoopWindowTarget;
 use iced_winit::winit::window::WindowBuilder;
 
@@ -42,19 +42,24 @@ impl<'a, A> iced_winit::window_configurator::WindowConfigurator<A> for MyWindowC
         };
         let is_wayland = is_wayland(window_target);
 
-        let size = monitor.size();
+        let size: LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());
         if is_wayland {
             window_builder
                 .with_resizable(true)
-                .with_inner_size(PhysicalSize::new(
-                    (size.width / 2).max(1024),
-                    (size.height / 3).max(300),
+                .with_inner_size(LogicalSize::new(
+                    (size.width / 2.0).max(1024.0),
+                    (size.height / 3.0).max(300.0),
                 ))
                 .with_decorations(true)
         } else {
             window_builder
+                .with_resizable(true)
                 .with_decorations(false)
-                .with_inner_size(PhysicalSize::new(size.width, 100))
+                .with_inner_size(LogicalSize::new(
+                    (size.width / 2.0).min(800.0).max(2000.0),
+                    200.0,
+                ))
+                .with_position(monitor.position())
         }
     }
 }

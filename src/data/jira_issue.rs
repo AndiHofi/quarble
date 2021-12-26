@@ -1,4 +1,5 @@
 use anyhow::bail;
+use std::fmt::{Display, Formatter};
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct JiraIssue {
     ident: String,
@@ -31,5 +32,18 @@ impl JiraIssue {
             }
             None => bail!("Invalid Jira issue number: {}", id),
         }
+    }
+}
+
+impl Display for JiraIssue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.ident)?;
+        if let Some(ref d) = self.description {
+            write!(f, ": {}", d)?;
+        }
+        if let Some(ref da) = self.default_action {
+            write!(f, " Default action: {}", da)?;
+        }
+        Ok(())
     }
 }

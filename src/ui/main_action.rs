@@ -1,5 +1,5 @@
 use crate::conf::Settings;
-use crate::data::WorkDay;
+use crate::data::ActiveDay;
 use crate::db::DB;
 use arc_swap::ArcSwap;
 use std::cell::RefCell;
@@ -10,7 +10,7 @@ pub struct MainAction {
     pub settings: Rc<ArcSwap<Settings>>,
     pub initial_action: InitialAction,
     pub db: DB,
-    pub work_day: Rc<RefCell<WorkDay>>,
+    pub work_day: Rc<RefCell<ActiveDay>>,
 }
 
 #[derive(Debug)]

@@ -1,13 +1,14 @@
-use chrono::{SubsecRound, Timelike};
 use iced_wgpu::TextInput;
 use iced_winit::widget::{text_input, Column, Row, Space, Text};
 
 use crate::conf::Settings;
-use crate::data::{Action, DayStart, Location, TimedAction, WorkDay};
-use crate::parsing::time::{Time, TimeLimit, TimeResult};
-use crate::parsing::time_relative::TimeRelative;
+use crate::data::{Action, ActiveDay, DayStart, Location, TimedAction};
+use crate::parsing::parse_result::ParseResult;
+use crate::parsing::time::Time;
+use crate::parsing::time_limit::{check_limits, InvalidTime, TimeLimit, TimeResult};
 use crate::ui::{style, MainView, Message, QElement};
 use crate::util;
+use crate::util::time_now;
 
 #[derive(Clone, Debug)]
 pub enum FastDayStartMessage {
@@ -20,14 +21,19 @@ pub(super) struct FastDayStart {
     value: Option<DayStart>,
     message: String,
     limits: Vec<TimeLimit>,
+    builder: DayStartBuilder,
+    bad_input: bool,
 }
 
 impl FastDayStart {
-    pub fn for_work_day(work_day: Option<&WorkDay>) -> Box<Self> {
+    pub fn for_work_day(work_day: Option<&ActiveDay>) -> Box<Self> {
         let (message, limits) = if let Some(work_day) = work_day {
             let mut actions = work_day.actions().to_vec();
             actions.sort();
-            (start_day_message(&actions), valid_time_limits_for_day_start(&actions))
+            (
+                start_day_message(&actions),
+                valid_time_limits_for_day_start(&actions),
+            )
         } else {
             ("Start working day".to_string(), Vec::default())
         };
@@ -40,12 +46,69 @@ impl FastDayStart {
             }),
             message,
             limits,
+            builder: DayStartBuilder {
+                ts: TimeResult::Valid(time_now().into()),
+                location: ParseResult::Valid(Location::Office),
+            },
+            bad_input: false,
         })
     }
     fn update_text(&mut self, new_value: String) -> Option<Message> {
+        self.parse_value(&new_value);
         self.text = new_value;
-        self.value = parse_value(&self.text);
+        self.value = self.builder.try_build();
         None
+    }
+
+    fn parse_value(&mut self, text: &str) {
+        fn parse_location(text: &str) -> (ParseResult<Location, ()>, &str) {
+            let text = text.trim();
+            let (location, text) = if text.starts_with(&['h', 'H'][..]) {
+                (ParseResult::Valid(Location::Home), (&text[1..]).trim())
+            } else if text.starts_with(&['o', 'O'][..]) {
+                (ParseResult::Valid(Location::Office), (&text[1..]).trim())
+            } else {
+                (ParseResult::None, text)
+            };
+            (location, text)
+        }
+
+        self.bad_input = false;
+        let (location, text) = parse_location(text);
+
+        self.builder.location = location;
+
+        let result = crate::parsing::parse_input(util::time_now().into(), text);
+
+        let result = result
+            .map_invalid(|_| InvalidTime::Bad)
+            .and_then(|r| check_limits(r, &self.limits));
+
+        self.builder.ts = result;
+    }
+}
+
+#[derive(Debug, Default)]
+struct DayStartBuilder {
+    location: ParseResult<Location, ()>,
+    ts: TimeResult,
+}
+
+impl DayStartBuilder {
+    fn try_build(&self) -> Option<DayStart> {
+        let location = self.location.clone().or_default().get();
+        let ts = self
+            .ts
+            .clone()
+            .or(Time::from(util::time_now()))
+            .get()
+            .map(|t| t.into());
+
+        if let (Some(location), Some(ts)) = (location, ts) {
+            Some(DayStart { location, ts })
+        } else {
+            None
+        }
     }
 }
 
@@ -114,37 +177,47 @@ impl MainView for FastDayStart {
             }),
             message: "Start working day".to_string(),
             limits: Vec::default(),
+            builder: DayStartBuilder::default(),
+            bad_input: false,
         })
     }
 
     fn view<'a>(&'a mut self, _settings: &Settings) -> QElement<'a> {
-        let loc_str = self
-            .value
-            .as_ref()
-            .map(|e| e.location.to_string())
-            .unwrap_or("Invalid input".to_string());
+        let loc_str = match self.builder.location.as_ref() {
+            ParseResult::Valid(t) => t.to_string(),
+            ParseResult::Invalid(_) | ParseResult::Incomplete => "Invalid location".to_string(),
+            ParseResult::None => Location::Office.to_string(),
+        };
 
-        let time_str = self
-            .value
-            .as_ref()
-            .map(|e| e.ts.to_string())
-            .unwrap_or(String::new());
+        let time_str = match self.builder.ts.as_ref() {
+            ParseResult::Valid(t) => t.to_string(),
+            ParseResult::Invalid(e) => format!("{:?}", e),
+            ParseResult::Incomplete => "invalid".to_string(),
+            ParseResult::None => "now".to_string(),
+        };
+
+        let header_row = Text::new(format!(
+            "Day start: [h|o] [+|-]hours or minute: {}",
+            &self.message
+        ));
+
+        let input_widget = TextInput::new(&mut self.text_state, "now", &self.text, move |input| {
+            on_input_change(input)
+        })
+        .on_submit(on_submit_message(self.value.as_ref()));
+
+        let status_row = Row::with_children(vec![
+            Text::new(loc_str).into(),
+            Space::with_width(style::SPACE).into(),
+            Text::new(time_str).into(),
+        ]);
 
         Column::with_children(vec![
-            Text::new(format!("Day start: [h|o] [+|-]hours or minute: {}", &self.message)).into(),
-            Space::with_width(style::SPACE).into(),
-            TextInput::new(&mut self.text_state, "now", &self.text, move |input| {
-                on_input_change(input)
-            })
-            .on_submit(on_submit_message(self.value.as_ref()))
-            .into(),
-            Space::with_width(style::SPACE).into(),
-            Row::with_children(vec![
-                Text::new(loc_str).into(),
-                Space::with_width(style::SPACE).into(),
-                Text::new(time_str).into(),
-            ])
-            .into(),
+            header_row.into(),
+            Space::with_height(style::SPACE).into(),
+            input_widget.into(),
+            Space::with_height(style::SPACE).into(),
+            status_row.into(),
         ])
         .into()
     }
@@ -157,42 +230,6 @@ impl MainView for FastDayStart {
             Message::StoreSuccess => Some(Message::Exit),
             _ => None,
         }
-    }
-}
-
-fn parse_value(text: &str) -> Option<DayStart> {
-    let text = text.trim();
-    let (location, text) = if text.starts_with(&['h', 'H'][..]) {
-        (Location::Home, (&text[1..]).trim())
-    } else if text.starts_with(&['o', 'O'][..]) {
-        (Location::Office, (&text[1..]).trim())
-    } else {
-        (Location::Office, text)
-    };
-
-    if let TimeResult::Valid(ts) = TimeLimit::default().is_valid(text) {
-        Some(DayStart {
-            location,
-            ts: ts.into(),
-        })
-    } else if let Some((tr, rest)) = TimeRelative::parse_prefix(text) {
-        let now: Time = util::time_now().into();
-        let ts = now.try_add_relative(tr)?;
-        if rest.trim().is_empty() {
-            Some(DayStart {
-                location,
-                ts: ts.into(),
-            })
-        } else {
-            None
-        }
-    } else if text.eq_ignore_ascii_case("now") || text.eq_ignore_ascii_case("n") {
-        Some(DayStart {
-            location,
-            ts: util::time_now().with_second(0).unwrap().trunc_subsecs(0),
-        })
-    } else {
-        None
     }
 }
 
@@ -213,7 +250,8 @@ mod test {
     use chrono::Timelike;
 
     use crate::parsing::time::Time;
-    use crate::ui::fast_day_start::parse_value;
+    use crate::ui::fast_day_start::FastDayStart;
+    use crate::ui::MainView;
     use crate::util;
 
     #[test]
@@ -230,7 +268,10 @@ mod test {
 
     fn p(i: &[&str]) {
         for input in i {
-            eprintln!("'{}' -> {:?}", input, parse_value(input));
+            let mut fds = FastDayStart::new();
+            fds.parse_value(*input);
+
+            eprintln!("'{}' -> {:?}", input, fds.builder.try_build());
         }
     }
 }

@@ -11,9 +11,10 @@ mod jira_issue;
 mod location;
 mod task;
 mod work;
+mod work_day;
 
-#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
-pub struct WorkDay {
+#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+pub struct ActiveDay {
     day: Day,
     main_location: Location,
     /// The jira issue that had a start event in previous days, but never ended
@@ -22,9 +23,9 @@ pub struct WorkDay {
     actions: Vec<Action>,
 }
 
-impl WorkDay {
-    pub fn new(day: Day, main_location: Location, active_issue: Option<JiraIssue>) -> WorkDay {
-        WorkDay {
+impl ActiveDay {
+    pub fn new(day: Day, main_location: Location, active_issue: Option<JiraIssue>) -> ActiveDay {
+        ActiveDay {
             day,
             main_location,
             active_issue,

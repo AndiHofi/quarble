@@ -1,24 +1,29 @@
 use std::rc::Rc;
 
 use arc_swap::ArcSwap;
+use iced_core::keyboard::{KeyCode, Modifiers};
+use iced_core::Padding;
 use iced_wgpu::Text;
 use iced_winit::settings::SettingsWindowConfigurator;
+use iced_winit::widget::Container;
 use iced_winit::{event, Command, Subscription};
 use iced_winit::{Element, Mode};
 use iced_winit::{Event, Program};
 
 use crate::conf::{InitialAction, MainAction, Settings};
-use crate::data::{Action, Day, WorkDay};
+use crate::data::{Action, ActiveDay, Day};
 use crate::db::DB;
 use crate::ui::book::Book;
+use crate::ui::current_day::CurrentDayUI;
 use crate::ui::fast_day_end::{FastDayEnd, FastDayEndMessage};
 use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
 
 mod book;
+mod current_day;
 mod entry_edit;
-mod fast_day_start;
 mod fast_day_end;
+mod fast_day_start;
 pub mod main_action;
 mod style;
 mod util;
@@ -38,6 +43,9 @@ pub enum Message {
     Down,
     Book,
     View,
+    CurrentDayUI,
+    FastDayStart,
+    FastDayEnd,
     UpdateStart {
         id: usize,
         input: String,
@@ -54,6 +62,7 @@ pub enum Message {
     },
     FDS(FastDayStartMessage),
     FDE(FastDayEndMessage),
+    CDUI(CurrentDayUI),
     StoreAction(Action),
     StoreSuccess,
     Error(String),
@@ -93,7 +102,7 @@ pub struct Quarble {
     current_view: CurrentView,
     settings: Rc<ArcSwap<Settings>>,
     db: DB,
-    active_day: Option<WorkDay>,
+    active_day: Option<ActiveDay>,
     active_day_dirty: bool,
 }
 
@@ -122,6 +131,28 @@ impl iced_winit::Program for Quarble {
                         self.current_view = CurrentView::Show(ViewBookings::new());
                     }
                 }
+                Message::CurrentDayUI => match &self.current_view {
+                    CurrentView::CDUI(_) => (),
+                    _ => {
+                        self.current_view = CurrentView::CDUI(CurrentDayUI::for_active_day(
+                            self.active_day.as_ref(),
+                        ))
+                    }
+                },
+                Message::FastDayStart => {
+                    if let CurrentView::FDS(_) = &self.current_view {
+                    } else {
+                        self.current_view =
+                            CurrentView::FDS(FastDayStart::for_work_day(self.active_day.as_ref()));
+                    }
+                }
+                Message::FastDayEnd => match &self.current_view {
+                    CurrentView::FDE(_) => (),
+                    _ => {
+                        self.current_view =
+                            CurrentView::FDE(FastDayEnd::for_work_day(self.active_day.as_ref()));
+                    }
+                },
                 Message::StoreAction(action) => {
                     if let Some(ref mut active_day) = self.active_day {
                         active_day.add_action(action);
@@ -151,13 +182,17 @@ impl iced_winit::Program for Quarble {
 
     fn view(&mut self) -> Element<'_, Self::Message, Self::Renderer> {
         let settings = self.settings.load();
-        match &mut self.current_view {
+        let content = match &mut self.current_view {
             CurrentView::Book(book) => book.view(&settings),
             CurrentView::Show(show) => show.view(&settings),
             CurrentView::FDS(fds) => fds.view(&settings),
             CurrentView::FDE(fde) => fde.view(&settings),
+            CurrentView::CDUI(cdui) => cdui.view(&settings),
             CurrentView::Exit(exit) => exit.view(&settings),
-        }
+        };
+        Container::new(content)
+            .padding(Padding::new(style::WINDOW_PADDING))
+            .into()
     }
 }
 
@@ -236,7 +271,6 @@ fn global_keyboard_handler(event: Event, status: iced_winit::event::Status) -> O
 }
 
 fn handle_control_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Message> {
-    use iced_core::keyboard::KeyCode;
     use iced_winit::keyboard::Event::*;
     match key_event {
         KeyPressed {
@@ -248,6 +282,8 @@ fn handle_control_keyboard_event(key_event: iced_winit::keyboard::Event) -> Opti
                     KeyCode::Escape => Some(Message::Exit),
                     _ => None,
                 }
+            } else if modifiers == Modifiers::CTRL {
+                handle_control_shortcuts(key_code)
             } else {
                 None
             }
@@ -256,8 +292,18 @@ fn handle_control_keyboard_event(key_event: iced_winit::keyboard::Event) -> Opti
     }
 }
 
+fn handle_control_shortcuts(key_code: KeyCode) -> Option<Message> {
+    match key_code {
+        KeyCode::V => Some(Message::View),
+        KeyCode::B => Some(Message::Book),
+        KeyCode::S => Some(Message::FastDayStart),
+        KeyCode::E => Some(Message::FastDayEnd),
+        KeyCode::Key1 => Some(Message::CurrentDayUI),
+        _ => None,
+    }
+}
+
 fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Message> {
-    use iced_core::keyboard::KeyCode;
     use iced_winit::keyboard::Event::*;
     match key_event {
         KeyPressed {
@@ -270,6 +316,9 @@ fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Messa
                     KeyCode::Tab => Some(Message::Next),
                     KeyCode::V => Some(Message::View),
                     KeyCode::B => Some(Message::Book),
+                    KeyCode::S => Some(Message::FastDayStart),
+                    KeyCode::E => Some(Message::FastDayEnd),
+                    KeyCode::Key1 => Some(Message::CurrentDayUI),
                     _ => None,
                 }
             } else if modifiers.shift() {
@@ -277,6 +326,8 @@ fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Messa
                     KeyCode::Tab => Some(Message::Previous),
                     _ => None,
                 }
+            } else if modifiers.control() {
+                handle_control_shortcuts(key_code)
             } else {
                 None
             }
@@ -290,6 +341,7 @@ enum CurrentView {
     Show(Box<ViewBookings>),
     FDS(Box<FastDayStart>),
     FDE(Box<FastDayEnd>),
+    CDUI(Box<CurrentDayUI>),
     Exit(Exit),
 }
 

@@ -2,7 +2,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
-use crate::data::{Day, JiraIssue, WorkDay};
+use crate::data::{Day, JiraIssue, ActiveDay};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -48,7 +48,7 @@ impl DB {
         }
     }
 
-    pub fn get_day(&self, day: Day) -> DBResult<WorkDay> {
+    pub fn get_day(&self, day: Day) -> DBResult<ActiveDay> {
         let work_day = self.load_day(day)?;
         if let Some(work_day) = work_day {
             Ok(work_day)
@@ -57,7 +57,7 @@ impl DB {
         }
     }
 
-    pub fn new_day(&self, day: Day) -> DBResult<WorkDay> {
+    pub fn new_day(&self, day: Day) -> DBResult<ActiveDay> {
         let mut prev_day = day.prev_day();
         let mut remaining = 6;
         let prev_work_day = loop {
@@ -72,7 +72,7 @@ impl DB {
             }
         };
 
-        let new_day = WorkDay::new(
+        let new_day = ActiveDay::new(
             day,
             prev_work_day
                 .as_ref()
@@ -86,12 +86,12 @@ impl DB {
         Ok(new_day)
     }
 
-    pub fn load_day(&self, day: Day) -> DBResult<Option<WorkDay>> {
+    pub fn load_day(&self, day: Day) -> DBResult<Option<ActiveDay>> {
         let to_load = self.work_day_path(day);
         if to_load.exists() {
             let file = File::open(&to_load).map_err(|e| DBErr::CannotOpen(to_load.clone(), e))?;
             let reader = BufReader::new(file);
-            let work_day: WorkDay = serde_json::from_reader(reader)
+            let work_day: ActiveDay = serde_json::from_reader(reader)
                 .map_err(|e| DBErr::InvalidDBFile(to_load.clone(), e))?;
             eprintln!("Loaded: {:?}", work_day);
             Ok(Some(work_day))
@@ -100,7 +100,7 @@ impl DB {
         }
     }
 
-    pub fn store_day(&self, day: Day, work_day: &WorkDay) -> DBResult<()> {
+    pub fn store_day(&self, day: Day, work_day: &ActiveDay) -> DBResult<()> {
         let to_store = self.work_day_path(day);
 
         let file = OpenOptions::new()
