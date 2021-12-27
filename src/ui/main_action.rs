@@ -20,6 +20,7 @@ pub enum InitialAction {
     Show,
     FastStartDay,
     FastEndDay,
+    BookSingle,
 }
 
 impl Default for InitialAction {

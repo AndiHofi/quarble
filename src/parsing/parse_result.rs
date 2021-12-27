@@ -74,6 +74,16 @@ impl<T, E> ParseResult<T, E> {
     }
 }
 
+impl <T: Clone + Default, E> ParseResult<T, E> {
+    pub fn get_with_default(&self, default: T) -> Option<T> {
+        match self {
+            ParseResult::None => Some(default),
+            ParseResult::Valid(t) => Some(t.clone()),
+            _ => None
+        }
+    }
+}
+
 impl <T: Default, E> ParseResult<T, E> {
     pub fn or_default(self) -> ParseResult<T, E> {
         self.or(T::default())

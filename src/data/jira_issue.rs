@@ -2,9 +2,9 @@ use anyhow::bail;
 use std::fmt::{Display, Formatter};
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct JiraIssue {
-    ident: String,
-    description: Option<String>,
-    default_action: Option<String>,
+    pub ident: String,
+    pub description: Option<String>,
+    pub default_action: Option<String>,
 }
 
 impl JiraIssue {

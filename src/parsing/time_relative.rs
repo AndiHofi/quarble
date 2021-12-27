@@ -1,6 +1,7 @@
 use crate::parsing::parse_result::ParseResult;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use std::ops::Neg;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct TimeRelative {
@@ -157,6 +158,16 @@ fn check_h_m(neg: bool, h: u8, m: u8, tail: &str) -> (ParseResult<TimeRelative, 
     match TimeRelative::new(neg, h, m) {
         Some(tr) => (ParseResult::Valid(tr), tail),
         None => (ParseResult::Invalid(()), tail),
+    }
+}
+
+impl Neg for TimeRelative {
+    type Output = TimeRelative;
+    fn neg(self) -> Self::Output {
+        TimeRelative {
+            h: -self.h,
+            m: -self.m,
+        }
     }
 }
 

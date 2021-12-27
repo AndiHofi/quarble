@@ -39,7 +39,7 @@ pub fn parse_absolute(input: &str) -> ParseResult<Time, ()> {
     ParseResult::Invalid(())
 }
 
-pub fn parse_input(now: Time, text: &str) -> ParseResult<Time, ()> {
+pub fn parse_input_rel(now: Time, text: &str, negate: bool) -> ParseResult<Time, ()> {
     if text.eq_ignore_ascii_case("now") || text.eq_ignore_ascii_case("n") {
         ParseResult::Valid(now)
     } else {
@@ -48,7 +48,7 @@ pub fn parse_input(now: Time, text: &str) -> ParseResult<Time, ()> {
             ParseResult::Invalid(()) => {
                 let (r, rest) = TimeRelative::parse_prefix(text);
 
-                let ts = r.and_then(|rel| match now.try_add_relative(rel) {
+                let ts = r.and_then(|rel| match now.try_add_relative(if negate { -rel } else { rel }) {
                     Some(ts) => ParseResult::Valid(ts),
                     None => ParseResult::Invalid(()),
                 });
@@ -66,4 +66,8 @@ pub fn parse_input(now: Time, text: &str) -> ParseResult<Time, ()> {
             }
         }
     }
+}
+
+pub fn parse_input(now: Time, text: &str) -> ParseResult<Time, ()> {
+    parse_input_rel(now, text, false)
 }

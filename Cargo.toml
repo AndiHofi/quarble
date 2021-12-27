@@ -22,10 +22,10 @@ tracing = "0.1"
 arc-swap = "1.5"
 
 iced_core = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }
+iced_native = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }
 iced_winit = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }
 iced_wgpu = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }
 iced_futures = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }
-iced_aw = { git = "https://github.com/iced-rs/iced_aw", brach = "main", default-features = false, features = ["date_picker"] }
 
 [dependencies.tracing-subscriber]
 version = "0.2"

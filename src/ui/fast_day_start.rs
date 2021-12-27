@@ -6,7 +6,7 @@ use crate::data::{Action, ActiveDay, DayStart, Location, TimedAction};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_limits, InvalidTime, TimeLimit, TimeResult};
-use crate::ui::{style, MainView, Message, QElement};
+use crate::ui::{style, MainView, Message, QElement, input_message};
 use crate::util;
 use crate::util::time_now;
 
@@ -113,11 +113,7 @@ impl DayStartBuilder {
 }
 
 fn start_day_message(actions: &[Action]) -> String {
-    match min_max_booked(actions) {
-        (None, None) => "Start working day".to_string(),
-        (Some(start), None) | (None, Some(start)) => format!("First action on {}", start),
-        (Some(start), Some(end)) => format!("Already booked from {} to {}", start, end),
-    }
+    input_message("Start working day", actions)
 }
 
 fn min_max_booked(actions: &[Action]) -> (Option<Time>, Option<Time>) {

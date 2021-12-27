@@ -1,8 +1,9 @@
+use iced_core::Length;
 use std::str::FromStr;
 
 use iced_wgpu::text_input;
 
-use crate::ui::Message;
+use crate::ui::{Message, QElement};
 
 pub(super) fn valid_start_time(id: usize, min_val: u32, input: String) -> Message {
     match valid_base_time(&input) {
@@ -86,6 +87,15 @@ pub(in crate::ui) fn focus_next_ed(items: &mut [&mut text_input::State]) -> Opti
 
     None
 }
+
+pub(in crate::ui) fn v_space<'a>(l: Length) -> QElement<'a> {
+    iced_winit::widget::Space::with_height(l).into()
+}
+
+pub(in crate::ui) fn h_space<'a>(l: Length) -> QElement<'a> {
+    iced_winit::widget::Space::with_width(l).into()
+}
+
 pub(in crate::ui) fn focus_previous(items: &mut [&mut text_input::State]) -> Option<Message> {
     if items.is_empty() {
         return None;

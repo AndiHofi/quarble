@@ -11,15 +11,19 @@ use iced_winit::{Element, Mode};
 use iced_winit::{Event, Program};
 
 use crate::conf::{InitialAction, MainAction, Settings};
-use crate::data::{Action, ActiveDay, Day};
+use crate::data::{Action, ActiveDay, Day, TimedAction};
 use crate::db::DB;
+use crate::parsing::time::Time;
 use crate::ui::book::Book;
+use crate::ui::book_single::{BookSingleMessage, BookSingleUI};
 use crate::ui::current_day::CurrentDayUI;
 use crate::ui::fast_day_end::{FastDayEnd, FastDayEndMessage};
 use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
+use iced_native::clipboard;
 
 mod book;
+mod book_single;
 mod current_day;
 mod entry_edit;
 mod fast_day_end;
@@ -46,6 +50,9 @@ pub enum Message {
     CurrentDayUI,
     FastDayStart,
     FastDayEnd,
+    BookSingle,
+    ReadClipboard,
+    ClipboardValue(Option<String>),
     UpdateStart {
         id: usize,
         input: String,
@@ -63,10 +70,12 @@ pub enum Message {
     FDS(FastDayStartMessage),
     FDE(FastDayEndMessage),
     CDUI(CurrentDayUI),
+    BS(BookSingleMessage),
     StoreAction(Action),
     StoreSuccess,
     Error(String),
 }
+
 impl Default for Message {
     fn default() -> Self {
         Message::Update
@@ -153,6 +162,13 @@ impl iced_winit::Program for Quarble {
                             CurrentView::FDE(FastDayEnd::for_work_day(self.active_day.as_ref()));
                     }
                 },
+                Message::BookSingle => match &self.current_view {
+                    CurrentView::BS(_) => (),
+                    _ => {
+                        self.current_view =
+                            CurrentView::BS(BookSingleUI::for_active_day(self.active_day.as_ref()));
+                    }
+                },
                 Message::StoreAction(action) => {
                     if let Some(ref mut active_day) = self.active_day {
                         active_day.add_action(action);
@@ -161,6 +177,16 @@ impl iced_winit::Program for Quarble {
                             Err(e) => Some(Message::Error(format!("{:?}", e))),
                         };
                     }
+                }
+                Message::ReadClipboard => {
+                    eprintln!("Reading clipboard");
+                    let clipboard = iced_native::command::Action::Clipboard(
+                        clipboard::Action::Read(Box::new(move |v| {
+                            eprintln!("got clipboard: '{:?}'", v);
+                            Message::ClipboardValue(v)
+                        })),
+                    );
+                    return Command::single(clipboard);
                 }
                 m => match &mut self.current_view {
                     CurrentView::Book(b) => {
@@ -172,6 +198,9 @@ impl iced_winit::Program for Quarble {
                     }
                     CurrentView::FDE(fde) => {
                         message = fde.update(m);
+                    }
+                    CurrentView::BS(bs) => {
+                        bs.update(m);
                     }
                     _ => {}
                 },
@@ -188,6 +217,7 @@ impl iced_winit::Program for Quarble {
             CurrentView::FDS(fds) => fds.view(&settings),
             CurrentView::FDE(fde) => fde.view(&settings),
             CurrentView::CDUI(cdui) => cdui.view(&settings),
+            CurrentView::BS(bs) => bs.view(&settings),
             CurrentView::Exit(exit) => exit.view(&settings),
         };
         Container::new(content)
@@ -217,6 +247,9 @@ impl iced_winit::Application for Quarble {
             }
             InitialAction::FastEndDay => {
                 CurrentView::FDE(FastDayEnd::for_work_day(active_day.as_ref()))
+            }
+            InitialAction::BookSingle => {
+                CurrentView::BS(BookSingleUI::for_active_day(active_day.as_ref()))
             }
         };
 
@@ -296,6 +329,7 @@ fn handle_control_shortcuts(key_code: KeyCode) -> Option<Message> {
     match key_code {
         KeyCode::V => Some(Message::View),
         KeyCode::B => Some(Message::Book),
+        KeyCode::I => Some(Message::BookSingle),
         KeyCode::S => Some(Message::FastDayStart),
         KeyCode::E => Some(Message::FastDayEnd),
         KeyCode::Key1 => Some(Message::CurrentDayUI),
@@ -316,6 +350,7 @@ fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Messa
                     KeyCode::Tab => Some(Message::Next),
                     KeyCode::V => Some(Message::View),
                     KeyCode::B => Some(Message::Book),
+                    KeyCode::I => Some(Message::BookSingle),
                     KeyCode::S => Some(Message::FastDayStart),
                     KeyCode::E => Some(Message::FastDayEnd),
                     KeyCode::Key1 => Some(Message::CurrentDayUI),
@@ -342,6 +377,7 @@ enum CurrentView {
     FDS(Box<FastDayStart>),
     FDE(Box<FastDayEnd>),
     CDUI(Box<CurrentDayUI>),
+    BS(Box<BookSingleUI>),
     Exit(Exit),
 }
 
@@ -376,11 +412,38 @@ impl MainView for Exit {
         Box::new(Exit)
     }
 
-    fn view<'a>(&'a mut self, _settings: &Settings) -> QElement<'a> {
+    fn view(&mut self, _settings: &Settings) -> QElement {
         Text::new("exiting ...").into()
     }
 
     fn update(&mut self, _msg: Message) -> Option<Message> {
         None
+    }
+}
+
+fn input_message(s: &str, actions: &[Action]) -> String {
+    match min_max_booked(actions) {
+        (None, None) => s.to_string(),
+        (Some(start), None) | (None, Some(start)) => format!("First action on {}", start),
+        (Some(start), Some(end)) => format!("Already booked from {} to {}", start, end),
+    }
+}
+
+fn min_max_booked(actions: &[Action]) -> (Option<Time>, Option<Time>) {
+    match actions {
+        [] => (None, None),
+        [first] => {
+            let (s, e) = first.times();
+            (Some(s), e)
+        }
+        [first, .., last] => {
+            let (s, _) = first.times();
+            let (e1, e2) = last.times();
+            if e2.is_some() {
+                (Some(s), e2)
+            } else {
+                (Some(s), Some(e1))
+            }
+        }
     }
 }

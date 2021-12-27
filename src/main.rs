@@ -71,7 +71,8 @@ fn main_inner() -> anyhow::Result<()> {
     let initial_action = match args_ref {
         ["day_start"] => InitialAction::FastStartDay,
         ["day_end"] => InitialAction::FastEndDay,
-        ["book"] => InitialAction::Book,
+        ["book"] => InitialAction::BookSingle,
+        ["booking"] => InitialAction::Book,
         ["show"] | [] => InitialAction::Show,
         unexpected => bail!("Unexpected arguments: {}", unexpected.join(" ")),
     };
