@@ -28,7 +28,7 @@ pub fn parse_absolute(input: &str) -> ParseResult<Time, ()> {
         if let (Ok(h), Ok(p)) = (u32::from_str(h), u32::from_str(p)) {
             return Time::check_hp(h, p);
         }
-    } else if let Ok(t) = u32::from_str(&input) {
+    } else if let Ok(t) = u32::from_str(input) {
         if t < 24 {
             return Time::check_hm(t, 0);
         } else if t > 100 && t <= 2359 {
@@ -48,10 +48,13 @@ pub fn parse_input_rel(now: Time, text: &str, negate: bool) -> ParseResult<Time,
             ParseResult::Invalid(()) => {
                 let (r, rest) = TimeRelative::parse_prefix(text);
 
-                let ts = r.and_then(|rel| match now.try_add_relative(if negate { -rel } else { rel }) {
-                    Some(ts) => ParseResult::Valid(ts),
-                    None => ParseResult::Invalid(()),
-                });
+                let ts =
+                    r.and_then(
+                        |rel| match now.try_add_relative(if negate { -rel } else { rel }) {
+                            Some(ts) => ParseResult::Valid(ts),
+                            None => ParseResult::Invalid(()),
+                        },
+                    );
 
                 match ts {
                     ParseResult::Valid(ts) => {

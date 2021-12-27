@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::num::{NonZeroU32};
+use std::num::NonZeroU32;
 use std::str::FromStr;
 
 use crate::parsing::parse_result::ParseResult;
@@ -46,15 +46,13 @@ impl Time {
             } else {
                 None
             }
+        } else if (h < 24 || (h == 24 && m == 0)) && m < 60 {
+            Some(Time {
+                h: h as u8,
+                m: m as u8,
+            })
         } else {
-            if (h < 24 || (h == 24 && m == 0)) && m < 60 {
-                Some(Time {
-                    h: h as u8,
-                    m: m as u8,
-                })
-            } else {
-                None
-            }
+            None
         }
     }
 
@@ -91,7 +89,7 @@ impl Time {
             if let (Ok(h), Ok(p)) = (u32::from_str(h), u32::from_str(p)) {
                 return Self::check_hp(h, p);
             }
-        } else if let Ok(t) = u32::from_str(&input) {
+        } else if let Ok(t) = u32::from_str(input) {
             if t < 24 {
                 return Self::check_hm(t, 0);
             } else if t > 100 && t <= 2359 {
@@ -129,10 +127,10 @@ impl Time {
             m -= 60;
             h += 1;
         }
-        if h < 0 || h >= 24 || m < 0 || m >= 60 {
-            None
-        } else {
+        if (0..24).contains(&h) && (0..60).contains(&m) {
             Some(Time::hm(h as u32, m as u32))
+        } else {
+            None
         }
     }
 
@@ -184,19 +182,19 @@ impl Time {
     }
 }
 
-impl Into<chrono::NaiveTime> for Time {
-    fn into(self) -> chrono::NaiveTime {
-        if self.h == 24 {
+impl From<Time> for chrono::NaiveTime {
+    fn from(t: Time) -> Self {
+        if t.h == 24 {
             chrono::NaiveTime::from_hms(23, 59, 59)
         } else {
-            chrono::NaiveTime::from_hms(self.h(), self.m(), 0)
+            chrono::NaiveTime::from_hms(t.h(), t.m(), 0)
         }
     }
 }
 
-impl Into<chrono::NaiveTime> for &Time {
-    fn into(self) -> chrono::NaiveTime {
-        (*self).into()
+impl From<&Time> for chrono::NaiveTime {
+    fn from(t: &Time) -> Self {
+        chrono::NaiveTime::from(*t)
     }
 }
 

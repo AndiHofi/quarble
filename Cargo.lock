@@ -1509,6 +1509,7 @@ dependencies = [
  "iced_winit",
  "log",
  "opentelemetry",
+ "regex",
  "serde",
  "serde_json",
  "thiserror",

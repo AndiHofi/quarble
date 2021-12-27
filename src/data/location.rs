@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-#[derive(Clone, Debug,  Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum Location {
     Office,
     Home,
@@ -13,7 +13,8 @@ impl Default for Location {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq,  serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[allow(clippy::box_collection)]
 pub struct OtherLocation(pub Box<String>);
 
 impl Display for Location {

@@ -116,7 +116,7 @@ fn do_write_settings(settings: &Settings) -> anyhow::Result<()> {
             }
         }
 
-        let to_write = SettingsSer::from_settings(&settings);
+        let to_write = SettingsSer::from_settings(settings);
         let buffer =
             serde_json::to_vec_pretty(&to_write).context("Failed to serialize settings")?;
         let mut file = OpenOptions::new()
@@ -211,16 +211,14 @@ fn today() -> NaiveDate {
         .date()
 }
 
-const SETTINGS_FILE_NAME: &'static str = "quarble_settings.json";
+const SETTINGS_FILE_NAME: &str = "quarble_settings.json";
 
 fn settings_location(explicit: Option<PathBuf>) -> anyhow::Result<PathBuf> {
     if let Some(explicit) = explicit {
         Ok(explicit)
     } else if let Ok(quarble_home_env) = std::env::var("QUARBLE_HOME") {
         let quarble_home = PathBuf::from(&quarble_home_env);
-        if quarble_home.is_absolute() {
-            Ok(quarble_home.join(SETTINGS_FILE_NAME))
-        } else if quarble_home.exists() {
+        if quarble_home.is_absolute() || quarble_home.exists() {
             Ok(quarble_home.join(SETTINGS_FILE_NAME))
         } else {
             bail!(
@@ -242,9 +240,7 @@ fn db_location(explicit: Option<PathBuf>, loaded: Option<&SettingsSer>) -> anyho
         Ok(db_dir.to_owned())
     } else if let Ok(quarble_home_env) = std::env::var("QUARBLE_HOME") {
         let quarble_home = PathBuf::from(&quarble_home_env);
-        if quarble_home.is_absolute() {
-            Ok(quarble_home.join("db"))
-        } else if quarble_home.exists() {
+        if quarble_home.is_absolute() || quarble_home.exists() {
             Ok(quarble_home.join("db"))
         } else {
             bail!(

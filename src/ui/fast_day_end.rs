@@ -47,7 +47,7 @@ impl FastDayEnd {
             builder: DayEndBuilder {
                 ts: ParseResult::Valid(util::time_now().into()),
             },
-            bad_input: false
+            bad_input: false,
         })
     }
 
@@ -63,7 +63,9 @@ impl FastDayEnd {
 
         let result = crate::parsing::parse_input(util::time_now().into(), text);
 
-        let result = result.map_invalid(|_| InvalidTime::Bad).and_then(|r| check_limits(r, &self.limits));
+        let result = result
+            .map_invalid(|_| InvalidTime::Bad)
+            .and_then(|r| check_limits(r, &self.limits));
 
         self.builder.ts = result;
     }
@@ -134,18 +136,18 @@ impl MainView for FastDayEnd {
             message: "Start working day".to_string(),
             limits: Vec::default(),
             builder: DayEndBuilder {
-                ts: ParseResult::Valid(util::time_now().into())
+                ts: ParseResult::Valid(util::time_now().into()),
             },
-            bad_input: false
+            bad_input: false,
         })
     }
 
-    fn view<'a>(&'a mut self, _settings: &Settings) -> QElement<'a> {
+    fn view(&mut self, _settings: &Settings) -> QElement {
         let time_str = self
             .value
             .as_ref()
             .map(|e| e.ts.to_string())
-            .unwrap_or(String::new());
+            .unwrap_or_default();
 
         Column::with_children(vec![
             Text::new(format!("Day end: [+|-]hours or minute: {}", &self.message)).into(),
@@ -163,7 +165,7 @@ impl MainView for FastDayEnd {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::FDE(msg) => match msg {
+            Message::Fde(msg) => match msg {
                 FastDayEndMessage::TextChanged(new_value) => self.update_text(new_value),
             },
             Message::StoreSuccess => Some(Message::Exit),
@@ -173,7 +175,7 @@ impl MainView for FastDayEnd {
 }
 
 fn on_input_change(text: String) -> Message {
-    Message::FDE(FastDayEndMessage::TextChanged(text))
+    Message::Fde(FastDayEndMessage::TextChanged(text))
 }
 
 fn on_submit_message(value: Option<&DayEnd>) -> Message {
@@ -197,10 +199,10 @@ impl DayEndBuilder {
 
 #[cfg(test)]
 mod test {
-    use chrono::Timelike;
     use crate::parsing::time::Time;
     use crate::ui::fast_day_end::FastDayEnd;
     use crate::ui::MainView;
+    use chrono::Timelike;
 
     use crate::util;
 

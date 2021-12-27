@@ -40,7 +40,7 @@ impl MainView for Book {
         })
     }
 
-    fn view<'a>(&'a mut self, settings: &Settings) -> QElement<'a> {
+    fn view(&mut self, settings: &Settings) -> QElement {
         let date = format!("Date: {}", settings.active_date);
         let resolution = format!("Resolution: {} min", settings.resolution.num_minutes());
         let first_row = Row::new()

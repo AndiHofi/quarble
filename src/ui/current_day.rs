@@ -30,12 +30,6 @@ impl MainView for CurrentDayUI {
         })
     }
 
-    fn update(&mut self, msg: Message) -> Option<Message> {
-        match msg {
-            _ => None,
-        }
-    }
-
     fn view<'a>(&'a mut self, _settings: &Settings) -> QElement<'a> {
         let day = self.data.get_day().to_string();
         let active_issue = self
@@ -68,5 +62,9 @@ impl MainView for CurrentDayUI {
             entries_scroll.into(),
         ])
         .into()
+    }
+
+    fn update(&mut self, _msg: Message) -> Option<Message> {
+        None
     }
 }

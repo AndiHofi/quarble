@@ -20,6 +20,7 @@ opentelemetry = { version = "0.16", features = ["metrics", "trace"] }
 tracing-opentelemetry = "0.15"
 tracing = "0.1"
 arc-swap = "1.5"
+regex = "1.5"
 
 iced_core = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }
 iced_native = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }

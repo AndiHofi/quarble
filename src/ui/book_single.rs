@@ -43,8 +43,8 @@ impl BookSingleUI {
             None
         };
 
-        match entries.as_slice() {
-            &[s, e, i, m0, ref m @ ..] => {
+        match *entries.as_slice() {
+            [s, e, i, m0, ref m @ ..] => {
                 if msg.is_empty() {
                     self.builder.start = parse_input_rel(now, s, true);
                     self.builder.end = parse_input(now, e);
@@ -54,19 +54,19 @@ impl BookSingleUI {
                     self.builder.task = ParseResult::Invalid(())
                 }
             }
-            &[s, e, i] => {
+            [s, e, i] => {
                 self.builder.start = parse_input_rel(now, s, true);
                 self.builder.end = parse_input(now, e);
                 self.builder.task = parse_issue(i);
             }
-            &[s, i] => {
+            [s, i] => {
                 self.builder.start = parse_input_rel(now, s, true);
                 self.builder.task = parse_issue(i);
             }
-            &[i] => {
+            [i] => {
                 self.builder.task = parse_issue(i);
             }
-            &[] => {
+            [] => {
                 self.builder.start = ParseResult::Incomplete;
             }
         };
@@ -109,7 +109,7 @@ impl MainView for BookSingleUI {
     fn view(&mut self, settings: &Settings) -> QElement {
         let msg = Text::new(&self.input_message);
         let input = TextInput::new(&mut self.input_state, "", &self.input, |s| {
-            Message::BS(BookSingleMessage::TextChanged(s))
+            Message::Bs(BookSingleMessage::TextChanged(s))
         })
         .on_submit(
             self.builder
@@ -156,7 +156,7 @@ impl MainView for BookSingleUI {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::BS(BookSingleMessage::TextChanged(msg)) => {
+            Message::Bs(BookSingleMessage::TextChanged(msg)) => {
                 self.parse_input(&msg);
                 self.input = msg;
                 self.follow_up_msg()
@@ -190,7 +190,7 @@ fn time_info<'a>(now: Time, v: ParseResult<Time, ()>) -> QElement<'a> {
     Text::new(
         v.get_with_default(now)
             .map(|e| e.to_string())
-            .unwrap_or("invalid".to_string()),
+            .unwrap_or_else(|| "invalid".to_string()),
     )
     .into()
 }
@@ -209,33 +209,18 @@ fn task_info<'a>(v: ParseResult<&Task, &()>) -> QElement<'a> {
 }
 
 fn parse_issue_clipboard(input: &str) -> Option<JiraIssue> {
-    let input = input.trim();
-    if let Some((key, input)) = input.split_once('-') {
-        if !key.chars().all(|c| c.is_ascii_alphabetic()) {
-            return None;
-        }
-        if let Some((num, rest)) = input.split_once(&[' ', '\t', ':'][..]) {
-            if !num.chars().all(|c| c.is_ascii_digit()) {
-                return None;
-            }
+    let pattern =
+        regex::RegexBuilder::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]+))(?:(?:\W)+(?P<comment>.*))?")
+            .build()
+            .unwrap();
+    let c = pattern.captures(input)?;
+    let id = c.name("id")?;
 
-            let description: String = rest.chars().skip_while(|ch| ch.is_alphanumeric()).collect();
-
-            Some(JiraIssue {
-                ident: format!("{}-{}", key, num),
-                description: if description.is_empty() {
-                    None
-                } else {
-                    Some(description)
-                },
-                default_action: None,
-            })
-        } else {
-            None
-        }
-    } else {
-        None
-    }
+    Some(JiraIssue {
+        ident: id.as_str().to_string(),
+        description: c.name("comment").map(|m| m.as_str().to_string()),
+        default_action: None,
+    })
 }
 
 fn parse_issue(input: &str) -> ParseResult<Task, ()> {
@@ -245,24 +230,22 @@ fn parse_issue(input: &str) -> ParseResult<Task, ()> {
         ParseResult::Valid(Task::Admin)
     } else if input == "c" {
         ParseResult::None
-    } else {
-        if let Some((key, num)) = input.split_once('-') {
-            if key.chars().all(|ch| ch.is_ascii_alphabetic())
-                && num.chars().all(|ch| ch.is_ascii_digit())
-                && key.len() >= 1
-                && num.len() >= 1
-            {
-                ParseResult::Valid(Task::Jira(JiraIssue {
-                    ident: format!("{}-{}", key, num),
-                    description: None,
-                    default_action: None,
-                }))
-            } else {
-                ParseResult::Invalid(())
-            }
+    } else if let Some((key, num)) = input.split_once('-') {
+        if key.chars().all(|ch| ch.is_ascii_alphabetic())
+            && num.chars().all(|ch| ch.is_ascii_digit())
+            && !key.is_empty()
+            && !num.is_empty()
+        {
+            ParseResult::Valid(Task::Jira(JiraIssue {
+                ident: format!("{}-{}", key, num),
+                description: None,
+                default_action: None,
+            }))
         } else {
             ParseResult::Invalid(())
         }
+    } else {
+        ParseResult::Invalid(())
     }
 }
 
@@ -277,11 +260,7 @@ struct WorkBuilder {
 
 impl WorkBuilder {
     fn needs_clipboard(&self) -> bool {
-        if let ParseResult::None = self.task {
-            true
-        } else {
-            false
-        }
+        matches!(self.task, ParseResult::None)
     }
 
     fn apply_clipboard(&mut self, value: Option<String>) {
@@ -310,7 +289,7 @@ impl WorkBuilder {
                 .clipboard
                 .get_ref()
                 .and_then(|e| parse_issue_clipboard(e))
-                .map(|i| Task::Jira(i)),
+                .map(Task::Jira),
             ParseResult::Valid(ref t) => Some(t.clone()),
             _ => None,
         };
@@ -332,11 +311,29 @@ impl WorkBuilder {
                 Some(Work {
                     start: start.into(),
                     end: end.into(),
-                    task: task.clone(),
+                    task,
                     description,
                 })
             }
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::data::JiraIssue;
+    use crate::ui::book_single::parse_issue_clipboard;
+
+    #[test]
+    fn test_parse_valid_clipboard() {
+        assert_eq!(
+            parse_issue_clipboard("CLIP-12345"),
+            Some(JiraIssue {
+                ident: "CLIP-12345".to_string(),
+                description: None,
+                default_action: None,
+            })
+        );
     }
 }

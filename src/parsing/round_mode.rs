@@ -1,4 +1,3 @@
-
 #[derive(Copy, Clone, Debug)]
 pub enum RoundMode {
     None,
@@ -11,9 +10,6 @@ pub enum RoundMode {
 
 impl RoundMode {
     pub(crate) fn is_sat(&self) -> bool {
-        match self {
-            RoundMode::SatUp | RoundMode::SatDown => true,
-            _ => false,
-        }
+        matches!(self, RoundMode::SatUp | RoundMode::SatDown)
     }
 }

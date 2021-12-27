@@ -1,7 +1,7 @@
 use crate::parsing::parse_result::ParseResult;
 use std::fmt::{Display, Formatter};
-use std::str::FromStr;
 use std::ops::Neg;
+use std::str::FromStr;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct TimeRelative {
@@ -34,22 +34,18 @@ impl Display for TimeRelative {
 
 impl TimeRelative {
     pub fn new(neg: bool, h: u8, m: u8) -> Option<TimeRelative> {
-        if h > 12 {
+        if h > 12 || m >= 60 {
             None
-        } else if m >= 60 {
-            None
+        } else if neg {
+            Some(TimeRelative {
+                h: 0 - (h as i8),
+                m: 0 - (m as i8),
+            })
         } else {
-            if neg {
-                Some(TimeRelative {
-                    h: 0 - (h as i8),
-                    m: 0 - (m as i8),
-                })
-            } else {
-                Some(TimeRelative {
-                    h: h as i8,
-                    m: m as i8,
-                })
-            }
+            Some(TimeRelative {
+                h: h as i8,
+                m: m as i8,
+            })
         }
     }
 
@@ -66,10 +62,10 @@ impl TimeRelative {
     }
 
     pub fn parse_relaxed(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
-        let (neg, input) = if input.starts_with('+') {
-            (false, &input[1..])
-        } else if input.starts_with('-') {
-            (true, &input[1..])
+        let (neg, input) = if let Some(stripped) = input.strip_prefix('+') {
+            (false, stripped)
+        } else if let Some(stripped) = input.strip_prefix('-') {
+            (true, stripped)
         } else {
             (false, input)
         };
@@ -78,17 +74,17 @@ impl TimeRelative {
     }
 
     pub fn parse_prefix(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
-        let (neg, input) = if input.starts_with('+') {
-            (false, &input[1..])
-        } else if input.starts_with('-') {
-            (true, &input[1..])
+        let (neg, input) = if let Some(stripped) = input.strip_prefix('+') {
+            (false, stripped)
+        } else if let Some(stripped) = input.strip_prefix('-') {
+            (true, stripped)
         } else {
             return (ParseResult::None, input);
         };
 
         match Self::parse_body(neg, input) {
             (ParseResult::None, rest) => (ParseResult::Invalid(()), rest),
-            o => o
+            o => o,
         }
     }
 
@@ -107,10 +103,10 @@ impl TimeRelative {
                 Ok(num) => num,
                 Err(_) => return (ParseResult::Invalid(()), tail),
             };
-            if tail.starts_with('h') {
-                (num, Unit::H, &tail[1..])
-            } else if tail.starts_with('m') {
-                (num, Unit::M, &tail[1..])
+            if let Some(hour) = tail.strip_prefix('h') {
+                (num, Unit::H, hour)
+            } else if let Some(minute) = tail.strip_prefix('m') {
+                (num, Unit::M, minute)
             } else {
                 (num, Unit::M, tail)
             }
@@ -129,8 +125,8 @@ impl TimeRelative {
                     Ok(num) => num,
                     Err(_) => return (ParseResult::Invalid(()), tail),
                 };
-                if tail.starts_with('m') {
-                    (num, &tail[1..])
+                if let Some(tail) = tail.strip_prefix('m') {
+                    (num, tail)
                 } else if tail.is_empty() || tail.starts_with(|c: char| c.is_ascii_whitespace()) {
                     (num, tail)
                 } else {
@@ -146,7 +142,7 @@ impl TimeRelative {
     }
 }
 
-fn str_split_at<'a, P: FnMut(char) -> bool>(s: &str, p: P) -> (&str, &str) {
+fn str_split_at<P: FnMut(char) -> bool>(s: &str, p: P) -> (&str, &str) {
     if let Some(start) = s.find(p) {
         (&s[0..start], &s[start..])
     } else {
@@ -252,7 +248,10 @@ mod test {
     fn assert_parse(v: &[(&str, &str, &str)]) -> Result<(), String> {
         for (input, expected, rest) in v {
             let (parsed, tail) = TimeRelative::parse_relaxed(input);
-            parsed.as_ref().get().ok_or(format!("Could not parse {} into {}", input, expected))?;
+            parsed
+                .as_ref()
+                .get()
+                .ok_or(format!("Could not parse {} into {}", input, expected))?;
             let result = parsed.get().unwrap().to_string();
             if &result != expected {
                 return Err(format!(

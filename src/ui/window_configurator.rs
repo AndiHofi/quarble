@@ -36,7 +36,7 @@ impl<'a, A> iced_winit::window_configurator::WindowConfigurator<A> for MyWindowC
                 monitors
                     .iter()
                     .find(|m| m.name().map(|n| n.to_lowercase() == name).unwrap_or(false))
-                    .or(monitors.first())
+                    .or_else(|| monitors.first())
                     .unwrap()
             }
         };
@@ -56,7 +56,7 @@ impl<'a, A> iced_winit::window_configurator::WindowConfigurator<A> for MyWindowC
                 .with_resizable(true)
                 .with_decorations(false)
                 .with_inner_size(LogicalSize::new(
-                    (size.width / 2.0).min(800.0).max(2000.0),
+                    (size.width / 2.0).max(800.0).min(2000.0),
                     200.0,
                 ))
                 .with_position(monitor.position())

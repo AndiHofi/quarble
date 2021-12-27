@@ -58,7 +58,7 @@ pub(super) fn valid_base_time(input: &str) -> (bool, Option<u32>) {
                 return (true, Some(h * 24 + (p * 60 / 100)));
             }
         }
-    } else if let Ok(t) = u32::from_str(&input) {
+    } else if let Ok(t) = u32::from_str(input) {
         if t < 24 {
             return (true, Some(t * 24));
         }

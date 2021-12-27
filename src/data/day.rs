@@ -101,7 +101,7 @@ impl<'de> serde::de::Visitor<'de> for DayVisitor {
                 ) {
                     (Ok(year), Ok(month), Ok(day)) => {
                         let date = chrono::NaiveDate::from_ymd_opt(year, month, day)
-                            .ok_or(E::custom("bad date"))?;
+                            .ok_or_else(|| E::custom("bad date"))?;
                         Ok(Day { date })
                     }
                     _ => Err(E::custom("invalid date")),

@@ -2,7 +2,7 @@ use crate::parsing::parse_result::ParseResult;
 use crate::parsing::round_mode::RoundMode;
 use crate::parsing::time::Time;
 use std::fmt::Write;
-use std::num::{NonZeroU8};
+use std::num::NonZeroU8;
 use std::str::FromStr;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -83,7 +83,7 @@ impl TimeLimit {
             if let (Ok(h), Ok(p)) = (u32::from_str(h), u32::from_str(p)) {
                 return self.check_hp(h, p);
             }
-        } else if let Ok(t) = u32::from_str(&input) {
+        } else if let Ok(t) = u32::from_str(input) {
             if t < 24 {
                 return self.check_hm(t, 0);
             } else if t > 100 && t <= 2359 {
@@ -112,14 +112,14 @@ impl TimeLimit {
                     result
                 }
             }
-            TimeResult::Invalid(InvalidTime::TooLate { max, .. } )=> {
+            TimeResult::Invalid(InvalidTime::TooLate { max, .. }) => {
                 if mode.is_sat() {
                     TimeResult::Valid(max.round(RoundMode::Down, self.resolution.into()))
                 } else {
                     result
                 }
             }
-            r @ (TimeResult::None |TimeResult::Invalid(_) | TimeResult::Incomplete) => r,
+            r @ (TimeResult::None | TimeResult::Invalid(_) | TimeResult::Incomplete) => r,
         }
     }
 

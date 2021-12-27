@@ -6,7 +6,7 @@ use crate::data::{Action, ActiveDay, DayStart, Location, TimedAction};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_limits, InvalidTime, TimeLimit, TimeResult};
-use crate::ui::{style, MainView, Message, QElement, input_message};
+use crate::ui::{input_message, style, MainView, Message, QElement};
 use crate::util;
 use crate::util::time_now;
 
@@ -178,7 +178,7 @@ impl MainView for FastDayStart {
         })
     }
 
-    fn view<'a>(&'a mut self, _settings: &Settings) -> QElement<'a> {
+    fn view(&mut self, _settings: &Settings) -> QElement {
         let loc_str = match self.builder.location.as_ref() {
             ParseResult::Valid(t) => t.to_string(),
             ParseResult::Invalid(_) | ParseResult::Incomplete => "Invalid location".to_string(),
@@ -220,7 +220,7 @@ impl MainView for FastDayStart {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::FDS(msg) => match msg {
+            Message::Fds(msg) => match msg {
                 FastDayStartMessage::TextChanged(new_value) => self.update_text(new_value),
             },
             Message::StoreSuccess => Some(Message::Exit),
@@ -230,7 +230,7 @@ impl MainView for FastDayStart {
 }
 
 fn on_input_change(text: String) -> Message {
-    Message::FDS(FastDayStartMessage::TextChanged(text))
+    Message::Fds(FastDayStartMessage::TextChanged(text))
 }
 
 fn on_submit_message(value: Option<&DayStart>) -> Message {
