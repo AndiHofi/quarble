@@ -1507,6 +1507,7 @@ dependencies = [
  "iced_native",
  "iced_wgpu",
  "iced_winit",
+ "lazy_static",
  "log",
  "opentelemetry",
  "regex",

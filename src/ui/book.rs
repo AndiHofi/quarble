@@ -30,7 +30,7 @@ impl Book {
 }
 
 impl MainView for Book {
-    fn new() -> Box<Self> {
+    fn new(_settings: &Settings) -> Box<Self> {
         let first = WorkStartEdit::new(0);
         let second = WorkEntryEdit::new(1);
         Box::new(Book {

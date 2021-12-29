@@ -2,26 +2,30 @@
 
 use crate::parsing::time::Time;
 use std::fmt::Debug;
+use std::sync::Arc;
 use std::time::SystemTime;
 
+#[deprecated]
 pub fn now() -> chrono::NaiveDateTime {
-    chrono::DateTime::<chrono::Local>::from(SystemTime::now()).naive_local()
+    DefaultTimeline.now()
 }
 
+#[deprecated]
 pub fn time_now() -> chrono::NaiveTime {
-    now().time()
+    DefaultTimeline.now().time()
 }
 
+#[deprecated]
 pub fn today() -> chrono::NaiveDate {
-    now().date()
+    DefaultTimeline.today()
 }
 
 #[derive(Clone, Debug)]
 pub struct DefaultTimeline;
 
-impl Timeline for DefaultTimeline {
+impl TimelineProvider for DefaultTimeline {
     fn now(&self) -> chrono::NaiveDateTime {
-        crate::util::now()
+        chrono::DateTime::<chrono::Local>::from(SystemTime::now()).naive_local()
     }
 }
 
@@ -34,13 +38,13 @@ impl StaticTimeline {
     }
 }
 
-impl Timeline for StaticTimeline {
+impl TimelineProvider for StaticTimeline {
     fn now(&self) -> chrono::NaiveDateTime {
         self.0
     }
 }
 
-pub trait Timeline: Clone + Debug + Send + Sync {
+pub trait TimelineProvider: Debug + Send + Sync {
     fn now(&self) -> chrono::NaiveDateTime;
 
     fn time_now(&self) -> Time {
@@ -48,7 +52,13 @@ pub trait Timeline: Clone + Debug + Send + Sync {
         now.time().into()
     }
 
+    fn naive_now(&self) -> chrono::NaiveTime {
+        self.now().time()
+    }
+
     fn today(&self) -> chrono::NaiveDate {
         self.now().date()
     }
 }
+
+pub type Timeline = Arc<dyn TimelineProvider>;

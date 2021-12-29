@@ -122,8 +122,8 @@ impl iced_winit::Program for Quarble {
     fn update(&mut self, message: Message) -> Command<Message> {
         let mut message = Some(message);
         while let Some(current) = message.take() {
+            let settings = self.settings.load();
             match current {
-                Message::Update => {}
                 Message::Error(msg) => eprintln!("Got an error: {}", msg),
                 Message::Exit => {
                     self.current_view = CurrentView::Exit(Exit);
@@ -131,13 +131,13 @@ impl iced_winit::Program for Quarble {
                 Message::Book => {
                     if let CurrentView::Book(_) = &self.current_view {
                     } else {
-                        self.current_view = CurrentView::Book(Book::new());
+                        self.current_view = CurrentView::Book(Book::new(&settings));
                     }
                 }
                 Message::View => {
                     if let CurrentView::Show(_) = &self.current_view {
                     } else {
-                        self.current_view = CurrentView::Show(ViewBookings::new());
+                        self.current_view = CurrentView::Show(ViewBookings::new(&settings));
                     }
                 }
                 Message::CurrentDayUI => match &self.current_view {
@@ -151,22 +151,28 @@ impl iced_winit::Program for Quarble {
                 Message::FastDayStart => {
                     if let CurrentView::Fds(_) = &self.current_view {
                     } else {
-                        self.current_view =
-                            CurrentView::Fds(FastDayStart::for_work_day(self.active_day.as_ref()));
+                        self.current_view = CurrentView::Fds(FastDayStart::for_work_day(
+                            &settings,
+                            self.active_day.as_ref(),
+                        ));
                     }
                 }
                 Message::FastDayEnd => match &self.current_view {
                     CurrentView::Fde(_) => (),
                     _ => {
-                        self.current_view =
-                            CurrentView::Fde(FastDayEnd::for_work_day(self.active_day.as_ref()));
+                        self.current_view = CurrentView::Fde(FastDayEnd::for_work_day(
+                            &settings,
+                            self.active_day.as_ref(),
+                        ));
                     }
                 },
                 Message::BookSingle => match &self.current_view {
                     CurrentView::Bs(_) => (),
                     _ => {
-                        self.current_view =
-                            CurrentView::Bs(BookSingleUI::for_active_day(self.active_day.as_ref()));
+                        self.current_view = CurrentView::Bs(BookSingleUI::for_active_day(
+                            &settings,
+                            self.active_day.as_ref(),
+                        ));
                     }
                 },
                 Message::StoreAction(action) => {
@@ -200,7 +206,7 @@ impl iced_winit::Program for Quarble {
                         message = fde.update(m);
                     }
                     CurrentView::Bs(bs) => {
-                        bs.update(m);
+                        message = bs.update(m);
                     }
                     _ => {}
                 },
@@ -239,17 +245,19 @@ impl iced_winit::Application for Quarble {
             Err(e) => (Some(Message::Error(format!("{:?}", e))), None),
         };
 
+        let guard = settings.load();
+
         let current_view = match flags.initial_action {
-            InitialAction::Book => CurrentView::Book(Book::new()),
+            InitialAction::Book => CurrentView::Book(Book::new(&guard)),
             InitialAction::Show => CurrentView::Show(Box::new(ViewBookings {})),
             InitialAction::FastStartDay => {
-                CurrentView::Fds(FastDayStart::for_work_day(active_day.as_ref()))
+                CurrentView::Fds(FastDayStart::for_work_day(&guard, active_day.as_ref()))
             }
             InitialAction::FastEndDay => {
-                CurrentView::Fde(FastDayEnd::for_work_day(active_day.as_ref()))
+                CurrentView::Fde(FastDayEnd::for_work_day(&guard, active_day.as_ref()))
             }
             InitialAction::BookSingle => {
-                CurrentView::Bs(BookSingleUI::for_active_day(active_day.as_ref()))
+                CurrentView::Bs(BookSingleUI::for_active_day(&guard, active_day.as_ref()))
             }
         };
 
@@ -376,7 +384,7 @@ enum CurrentView {
 }
 
 trait MainView {
-    fn new() -> Box<Self>;
+    fn new(settings: &Settings) -> Box<Self>;
 
     fn view(&mut self, settings: &Settings) -> QElement;
 
@@ -388,7 +396,7 @@ type QElement<'a> = Element<'a, Message, <Quarble as iced_winit::Program>::Rende
 struct ViewBookings {}
 
 impl MainView for ViewBookings {
-    fn new() -> Box<Self> {
+    fn new(_settings: &Settings) -> Box<Self> {
         Box::new(ViewBookings {})
     }
     fn view(&mut self, _settings: &Settings) -> QElement {
@@ -402,7 +410,7 @@ impl MainView for ViewBookings {
 struct Exit;
 
 impl MainView for Exit {
-    fn new() -> Box<Self> {
+    fn new(_settings: &Settings) -> Box<Self> {
         Box::new(Exit)
     }
 

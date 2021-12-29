@@ -7,8 +7,7 @@ use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_limits, InvalidTime, TimeLimit, TimeResult};
 use crate::ui::{input_message, style, MainView, Message, QElement};
-use crate::util;
-use crate::util::time_now;
+use crate::util::Timeline;
 
 #[derive(Clone, Debug)]
 pub enum FastDayStartMessage {
@@ -23,10 +22,11 @@ pub(super) struct FastDayStart {
     limits: Vec<TimeLimit>,
     builder: DayStartBuilder,
     bad_input: bool,
+    timeline: Timeline,
 }
 
 impl FastDayStart {
-    pub fn for_work_day(work_day: Option<&ActiveDay>) -> Box<Self> {
+    pub fn for_work_day(settings: &Settings, work_day: Option<&ActiveDay>) -> Box<Self> {
         let (message, limits) = if let Some(work_day) = work_day {
             let mut actions = work_day.actions().to_vec();
             actions.sort();
@@ -37,26 +37,28 @@ impl FastDayStart {
         } else {
             ("Start working day".to_string(), Vec::default())
         };
+        let timeline = settings.timeline.clone();
         Box::new(FastDayStart {
             text: String::new(),
             text_state: text_input::State::focused(),
             value: Some(DayStart {
                 location: Location::Office,
-                ts: util::time_now(),
+                ts: timeline.naive_now(),
             }),
             message,
             limits,
             builder: DayStartBuilder {
-                ts: TimeResult::Valid(time_now().into()),
+                ts: TimeResult::Valid(timeline.time_now()),
                 location: ParseResult::Valid(Location::Office),
             },
             bad_input: false,
+            timeline,
         })
     }
     fn update_text(&mut self, new_value: String) -> Option<Message> {
         self.parse_value(&new_value);
         self.text = new_value;
-        self.value = self.builder.try_build();
+        self.value = self.builder.try_build(&self.timeline);
         None
     }
 
@@ -78,7 +80,7 @@ impl FastDayStart {
 
         self.builder.location = location;
 
-        let result = crate::parsing::parse_input(util::time_now().into(), text);
+        let result = crate::parsing::parse_input(self.timeline.time_now(), text);
 
         let result = result
             .map_invalid(|_| InvalidTime::Bad)
@@ -95,12 +97,12 @@ struct DayStartBuilder {
 }
 
 impl DayStartBuilder {
-    fn try_build(&self) -> Option<DayStart> {
+    fn try_build(&self, timeline: &Timeline) -> Option<DayStart> {
         let location = self.location.clone().or_default().get();
         let ts = self
             .ts
             .clone()
-            .or(Time::from(util::time_now()))
+            .or(timeline.time_now())
             .get()
             .map(|t| t.into());
 
@@ -163,19 +165,8 @@ fn valid_time_limits_for_day_start(actions: &[Action]) -> Vec<TimeLimit> {
 }
 
 impl MainView for FastDayStart {
-    fn new() -> Box<Self> {
-        Box::new(FastDayStart {
-            text: String::new(),
-            text_state: text_input::State::focused(),
-            value: Some(DayStart {
-                location: Location::Office,
-                ts: util::time_now(),
-            }),
-            message: "Start working day".to_string(),
-            limits: Vec::default(),
-            builder: DayStartBuilder::default(),
-            bad_input: false,
-        })
+    fn new(settings: &Settings) -> Box<Self> {
+        FastDayStart::for_work_day(settings, None)
     }
 
     fn view(&mut self, _settings: &Settings) -> QElement {
@@ -243,31 +234,30 @@ fn on_submit_message(value: Option<&DayStart>) -> Message {
 
 #[cfg(test)]
 mod test {
-    use chrono::Timelike;
-
-    use crate::parsing::time::Time;
     use crate::ui::fast_day_start::FastDayStart;
     use crate::ui::MainView;
-    use crate::util;
+    use crate::util::StaticTimeline;
+    use crate::Settings;
 
     #[test]
     fn test_parse_value() {
-        let c_time = util::time_now();
-        eprintln!("{:?}, {}, {}", c_time, c_time.hour(), c_time.minute());
-        let time: Time = c_time.into();
-        eprintln!("{}", time);
-        eprintln!("{}", Time::hm(1, 9));
         p(&[
             "h12", "h12h", "h12m", "h+1h", "h-1m", "h-15", "-15", "o +1h15m", "h+0m ", "h+1",
         ])
     }
 
     fn p(i: &[&str]) {
+        let timeline = StaticTimeline::parse("2021-12-29 10:00");
+        let settings = Settings::default().with_timeline(timeline);
         for input in i {
-            let mut fds = FastDayStart::new();
+            let mut fds = FastDayStart::new(&settings);
             fds.parse_value(*input);
 
-            eprintln!("'{}' -> {:?}", input, fds.builder.try_build());
+            eprintln!(
+                "'{}' -> {:?}",
+                input,
+                fds.builder.try_build(&settings.timeline)
+            );
         }
     }
 }

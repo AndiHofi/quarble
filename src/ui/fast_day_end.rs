@@ -7,7 +7,7 @@ use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_limits, InvalidTime, TimeLimit, TimeResult};
 use crate::ui::{style, MainView, Message, QElement};
-use crate::util;
+use crate::util::Timeline;
 
 #[derive(Clone, Debug)]
 pub enum FastDayEndMessage {
@@ -22,10 +22,11 @@ pub(super) struct FastDayEnd {
     limits: Vec<TimeLimit>,
     builder: DayEndBuilder,
     bad_input: bool,
+    timeline: Timeline,
 }
 
 impl FastDayEnd {
-    pub fn for_work_day(work_day: Option<&ActiveDay>) -> Box<Self> {
+    pub fn for_work_day(settings: &Settings, work_day: Option<&ActiveDay>) -> Box<Self> {
         let (message, limits) = if let Some(work_day) = work_day {
             let mut actions = work_day.actions().to_vec();
             actions.sort();
@@ -36,18 +37,20 @@ impl FastDayEnd {
         } else {
             ("Start working day".to_string(), Vec::default())
         };
+        let timeline = settings.timeline.clone();
         Box::new(Self {
             text: String::new(),
             text_state: text_input::State::focused(),
             value: Some(DayEnd {
-                ts: util::time_now(),
+                ts: timeline.naive_now(),
             }),
             message,
             limits,
             builder: DayEndBuilder {
-                ts: ParseResult::Valid(util::time_now().into()),
+                ts: ParseResult::Valid(timeline.time_now()),
             },
             bad_input: false,
+            timeline,
         })
     }
 
@@ -61,7 +64,7 @@ impl FastDayEnd {
     fn parse_value(&mut self, text: &str) {
         self.bad_input = false;
 
-        let result = crate::parsing::parse_input(util::time_now().into(), text);
+        let result = crate::parsing::parse_input(self.timeline.time_now(), text);
 
         let result = result
             .map_invalid(|_| InvalidTime::Bad)
@@ -126,19 +129,21 @@ fn valid_time_limits_for_day_end(actions: &[Action]) -> Vec<TimeLimit> {
 }
 
 impl MainView for FastDayEnd {
-    fn new() -> Box<Self> {
+    fn new(settings: &Settings) -> Box<Self> {
+        let timeline = settings.timeline.clone();
         Box::new(FastDayEnd {
             text: String::new(),
             text_state: text_input::State::focused(),
             value: Some(DayEnd {
-                ts: util::time_now(),
+                ts: timeline.naive_now(),
             }),
             message: "Start working day".to_string(),
             limits: Vec::default(),
             builder: DayEndBuilder {
-                ts: ParseResult::Valid(util::time_now().into()),
+                ts: ParseResult::Valid(timeline.time_now()),
             },
             bad_input: false,
+            timeline,
         })
     }
 
@@ -204,11 +209,12 @@ mod test {
     use crate::ui::MainView;
     use chrono::Timelike;
 
-    use crate::util;
+    use crate::util::TimelineProvider;
+    use crate::{DefaultTimeline, Settings};
 
     #[test]
     fn test_parse_value() {
-        let c_time = util::time_now();
+        let c_time = DefaultTimeline.naive_now();
         eprintln!("{:?}, {}, {}", c_time, c_time.hour(), c_time.minute());
         let time: Time = c_time.into();
         eprintln!("{}", time);
@@ -219,7 +225,8 @@ mod test {
     }
 
     fn p(i: &[&str]) {
-        let mut fde = FastDayEnd::new();
+        let settings = Settings::default();
+        let mut fde = FastDayEnd::new(&settings);
         for input in i {
             fde.parse_value(input);
             eprintln!("'{}' -> {:?}", input, fde.builder);

@@ -1,13 +1,12 @@
 use std::fmt::Debug;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParseResult<T, E> {
     None,
     Valid(T),
     Invalid(E),
     Incomplete,
 }
-
 
 impl<T, E> Default for ParseResult<T, E> {
     fn default() -> Self {
@@ -52,7 +51,6 @@ impl<T, E> ParseResult<T, E> {
         }
     }
 
-
     pub fn or(self, default: T) -> ParseResult<T, E> {
         match self {
             ParseResult::Valid(v) => ParseResult::Valid(v),
@@ -65,7 +63,7 @@ impl<T, E> ParseResult<T, E> {
     pub fn get(self) -> Option<T> {
         match self {
             ParseResult::Valid(v) => Some(v),
-            _ => None
+            _ => None,
         }
     }
 
@@ -74,17 +72,17 @@ impl<T, E> ParseResult<T, E> {
     }
 }
 
-impl <T: Clone + Default, E> ParseResult<T, E> {
+impl<T: Clone + Default, E> ParseResult<T, E> {
     pub fn get_with_default(&self, default: T) -> Option<T> {
         match self {
             ParseResult::None => Some(default),
             ParseResult::Valid(t) => Some(t.clone()),
-            _ => None
+            _ => None,
         }
     }
 }
 
-impl <T: Default, E> ParseResult<T, E> {
+impl<T: Default, E> ParseResult<T, E> {
     pub fn or_default(self) -> ParseResult<T, E> {
         self.or(T::default())
     }

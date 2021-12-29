@@ -5,10 +5,21 @@ use crate::parsing::time::Time;
 use crate::parsing::{parse_input, parse_input_rel};
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{input_message, style, MainView, Message, QElement};
-use crate::util;
+use crate::util::Timeline;
+use crate::DefaultTimeline;
 use iced_native::widget::Row;
 use iced_wgpu::TextInput;
 use iced_winit::widget::{text_input, Column, Text};
+use lazy_static::lazy_static;
+use std::ops::Deref;
+use std::sync::Arc;
+
+lazy_static! {
+    static ref ISSUE_NUM: regex::Regex =
+        regex::RegexBuilder::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]+))(?:(?:\W)+(?P<comment>.*))?")
+            .build()
+            .unwrap();
+}
 
 #[derive(Clone, Debug)]
 pub enum BookSingleMessage {
@@ -21,6 +32,7 @@ pub struct BookSingleUI {
     data: Option<Work>,
     builder: WorkBuilder,
     input_message: String,
+    timeline: Timeline,
 }
 
 impl BookSingleUI {
@@ -31,12 +43,13 @@ impl BookSingleUI {
             (text, "")
         };
 
-        let now = util::time_now().into();
+        let now = self.timeline.time_now();
+
+        let orig = std::mem::take(&mut self.builder.task);
 
         let entries: Vec<_> = text.splitn(4, ' ').collect();
         self.builder.start = ParseResult::None;
         self.builder.end = ParseResult::None;
-        self.builder.task = ParseResult::None;
         self.builder.msg = if msg.is_empty() {
             Some(msg.to_string())
         } else {
@@ -49,7 +62,11 @@ impl BookSingleUI {
                     self.builder.start = parse_input_rel(now, s, true);
                     self.builder.end = parse_input(now, e);
                     self.builder.task = parse_issue(i);
-                    self.builder.msg = Some(format!("{} {}", m0, m.join(" ")));
+                    self.builder.msg = Some(if m.is_empty() {
+                        m0.to_string()
+                    } else {
+                        format!("{} {}", m0, m.join(" "))
+                    });
                 } else {
                     self.builder.task = ParseResult::Invalid(())
                 }
@@ -70,55 +87,64 @@ impl BookSingleUI {
                 self.builder.start = ParseResult::Incomplete;
             }
         };
+
+        if self.builder.needs_clipboard() && matches!(orig, ParseResult::Valid(_)) {
+            self.builder.task = orig;
+            self.builder.clipboard_reading = "";
+        }
     }
 
-    pub fn for_active_day(active_day: Option<&ActiveDay>) -> Box<Self> {
+    pub fn for_active_day(settings: &Settings, active_day: Option<&ActiveDay>) -> Box<Self> {
         let actions = active_day.map(|a| a.actions()).unwrap_or_default();
         Box::new(Self {
-            input_state: Default::default(),
+            input_state: text_input::State::focused(),
             input: "".to_string(),
             data: None,
             builder: Default::default(),
             input_message: input_message("Book issue", actions),
+            timeline: settings.timeline.clone(),
         })
     }
 
     fn follow_up_msg(&mut self) -> Option<Message> {
-        if let (ParseResult::None, ParseResult::None) =
-            (self.builder.clipboard.as_ref(), self.builder.task.as_ref())
-        {
-            self.builder.clipboard = ParseResult::Incomplete;
+        if self.builder.needs_clipboard() {
+            self.builder.clipboard_reading = "reading...";
             Some(Message::ReadClipboard)
         } else {
             None
         }
     }
+
+    fn on_submit_message(&self, settings: &Settings) -> Message {
+        self.builder
+            .try_build(settings.timeline.time_now(), settings)
+            .map(|e| Message::StoreAction(crate::data::Action::Work(e)))
+            .unwrap_or_default()
+    }
 }
 
 impl MainView for BookSingleUI {
-    fn new() -> Box<Self> {
+    fn new(_settings: &Settings) -> Box<Self> {
         Box::new(Self {
             input_state: text_input::State::focused(),
             builder: Default::default(),
             data: None,
             input: String::new(),
             input_message: input_message("Book issue", &[]),
+            timeline: Arc::new(DefaultTimeline),
         })
     }
 
     fn view(&mut self, settings: &Settings) -> QElement {
+        let on_submit = self.on_submit_message(settings);
+
         let msg = Text::new(&self.input_message);
         let input = TextInput::new(&mut self.input_state, "", &self.input, |s| {
             Message::Bs(BookSingleMessage::TextChanged(s))
         })
-        .on_submit(
-            self.builder
-                .try_build(util::time_now().into(), settings)
-                .map(|e| Message::StoreAction(crate::data::Action::Work(e)))
-                .unwrap_or_default(),
-        );
+        .on_submit(on_submit);
 
-        let now = util::time_now().into();
+        let now = settings.timeline.time_now();
 
         let status = Row::with_children(vec![
             text("Start:"),
@@ -131,7 +157,7 @@ impl MainView for BookSingleUI {
             h_space(style::DSPACE),
             text("Task:"),
             h_space(style::SPACE),
-            task_info(self.builder.task.as_ref()),
+            task_info(self.builder.task.as_ref(), self.builder.clipboard_reading),
             h_space(style::DSPACE),
             text("Message:"),
             h_space(style::SPACE),
@@ -161,23 +187,12 @@ impl MainView for BookSingleUI {
                 self.input = msg;
                 self.follow_up_msg()
             }
-            Message::ClipboardValue(v) => match v {
-                Some(v) => {
-                    match parse_issue_clipboard(&v) {
-                        Some(i) => self.builder.task = ParseResult::Valid(Task::Jira(i)),
-                        None => self.builder.task = ParseResult::Invalid(()),
-                    };
-                    eprintln!("{} --> {:?}", v, self.builder.task);
-                    self.builder.clipboard = ParseResult::Valid(v);
-                    None
-                }
-                None => {
-                    self.builder.clipboard = ParseResult::Invalid(());
-                    None
-                }
-            },
+            Message::ClipboardValue(v) => {
+                self.builder.apply_clipboard(v);
+                None
+            }
             Message::StoreSuccess => Some(Message::Exit),
-            _ => None,
+            _ => self.follow_up_msg(),
         }
     }
 }
@@ -195,24 +210,25 @@ fn time_info<'a>(now: Time, v: ParseResult<Time, ()>) -> QElement<'a> {
     .into()
 }
 
-fn task_info<'a>(v: ParseResult<&Task, &()>) -> QElement<'a> {
+fn task_info<'a>(v: ParseResult<&'a Task, &'a ()>, clipboard: &'a str) -> QElement<'a> {
     match v {
-        ParseResult::Valid(t) => match t {
-            Task::Jira(i) => text(&i.ident),
-            Task::Admin => text("Admin"),
-            Task::Meeting => text("Meeting"),
-        },
+        ParseResult::Valid(t) => task_text(t),
         ParseResult::Invalid(_) => text("invalid"),
         ParseResult::Incomplete => text("incomplete"),
-        ParseResult::None => text("<clipboard>"),
+        ParseResult::None => text(clipboard),
+    }
+}
+
+fn task_text(t: &Task) -> QElement {
+    match t {
+        Task::Jira(i) => text(&i.ident),
+        Task::Admin => text("Admin"),
+        Task::Meeting => text("Meeting"),
     }
 }
 
 fn parse_issue_clipboard(input: &str) -> Option<JiraIssue> {
-    let pattern =
-        regex::RegexBuilder::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]+))(?:(?:\W)+(?P<comment>.*))?")
-            .build()
-            .unwrap();
+    let pattern = ISSUE_NUM.deref();
     let c = pattern.captures(input)?;
     let id = c.name("id")?;
 
@@ -255,27 +271,32 @@ struct WorkBuilder {
     end: ParseResult<Time, ()>,
     task: ParseResult<Task, ()>,
     msg: Option<String>,
-    clipboard: ParseResult<String, ()>,
+    clipboard_reading: &'static str,
 }
 
 impl WorkBuilder {
     fn needs_clipboard(&self) -> bool {
-        matches!(self.task, ParseResult::None)
+        matches!(self.task, ParseResult::None) && self.clipboard_reading.is_empty()
     }
 
     fn apply_clipboard(&mut self, value: Option<String>) {
+        self.clipboard_reading = "";
         if let ParseResult::None = self.task {
-            if let Some(e) = value {
-                if let Some(ji) = parse_issue_clipboard(&e) {
+            let value = value.as_deref().unwrap_or("");
+            if !value.is_empty() {
+                if let Some(ji) = parse_issue_clipboard(value) {
                     self.task = ParseResult::Valid(Task::Jira(ji));
                 } else {
                     self.task = ParseResult::Invalid(());
+                    self.clipboard_reading = "invalid clip"
                 }
             } else {
-                self.task = ParseResult::Incomplete;
+                self.task = ParseResult::Invalid(());
+                self.clipboard_reading = "no clipboard"
             }
         } else {
             eprintln!("Cannot apply clipboard");
+            self.clipboard_reading = "unexpected";
         }
     }
 
@@ -284,30 +305,27 @@ impl WorkBuilder {
 
         let end = self.end.get_with_default(now);
 
-        let task = match self.task {
-            ParseResult::None => self
-                .clipboard
-                .get_ref()
-                .and_then(|e| parse_issue_clipboard(e))
-                .map(Task::Jira),
-            ParseResult::Valid(ref t) => Some(t.clone()),
-            _ => None,
-        };
+        let task = self.task.clone().get();
 
         match (start, end, task) {
             (Some(start), Some(end), Some(task)) => {
                 let description = if let Some(ref d) = self.msg {
-                    d.to_string()
+                    d
                 } else {
                     match task {
                         Task::Jira(JiraIssue {
+                            default_action: Some(ref action),
+                            ..
+                        }) => action,
+                        Task::Jira(JiraIssue {
                             description: Some(ref description),
                             ..
-                        }) => description.to_string(),
+                        }) => description,
                         _ => return None,
                     }
                 };
 
+                let description = description.to_string();
                 Some(Work {
                     start: start.into(),
                     end: end.into(),
@@ -322,8 +340,12 @@ impl WorkBuilder {
 
 #[cfg(test)]
 mod test {
-    use crate::data::JiraIssue;
-    use crate::ui::book_single::parse_issue_clipboard;
+    use crate::data::{JiraIssue, Task, Work};
+    use crate::parsing::parse_result::ParseResult;
+    use crate::parsing::time::Time;
+    use crate::ui::book_single::{parse_issue_clipboard, BookSingleMessage, BookSingleUI};
+    use crate::ui::{MainView, Message};
+    use crate::Settings;
 
     #[test]
     fn test_parse_valid_clipboard() {
@@ -334,6 +356,68 @@ mod test {
                 description: None,
                 default_action: None,
             })
+        );
+    }
+
+    #[test]
+    fn book_single_integration_test() {
+        let settings = Settings::default();
+        let mut bs = BookSingleUI::for_active_day(&settings, None);
+        let text_changed_msg = bs.update(Message::Bs(BookSingleMessage::TextChanged(
+            "1 10 c comment".to_string(),
+        )));
+
+        assert!(matches!(text_changed_msg, Some(Message::ReadClipboard)));
+
+        assert_eq!(bs.builder.clipboard_reading, "reading...");
+        assert_eq!(bs.builder.task, ParseResult::None);
+        assert_eq!(bs.builder.start, ParseResult::Valid(Time::hm(1, 0)));
+        assert_eq!(bs.builder.end, ParseResult::Valid(Time::hm(10, 0)));
+        assert_eq!(bs.builder.msg.as_deref(), Some("comment"));
+
+        let clip_value = bs.update(Message::ClipboardValue(Some("CLIP-1234".to_string())));
+        assert!(clip_value.is_none());
+
+        assert_eq!(bs.builder.clipboard_reading, "");
+        assert_eq!(
+            bs.builder.task,
+            ParseResult::Valid(Task::Jira(JiraIssue {
+                ident: "CLIP-1234".to_string(),
+                description: None,
+                default_action: None,
+            }))
+        );
+
+        let work = bs.builder.try_build(Time::hm(11, 0), &settings).unwrap();
+        assert_eq!(
+            work,
+            Work {
+                start: Time::hm(1, 0).into(),
+                end: Time::hm(10, 0).into(),
+                task: Task::Jira(JiraIssue::create("CLIP-1234").unwrap()),
+                description: "comment".to_string()
+            }
+        );
+
+        let next_letter = bs.update(Message::Bs(BookSingleMessage::TextChanged(
+            "1 10 c comment1".to_string(),
+        )));
+
+        assert_eq!(bs.builder.clipboard_reading, "");
+        assert!(matches!(bs.builder.task, ParseResult::Valid(Task::Jira(_))));
+        assert_eq!(bs.builder.start, ParseResult::Valid(Time::hm(1, 0)));
+        assert_eq!(bs.builder.end, ParseResult::Valid(Time::hm(10, 0)));
+        assert_eq!(bs.builder.msg.as_deref(), Some("comment1"));
+
+        assert!(matches!(next_letter, None));
+        let on_submit = bs.on_submit_message(&settings);
+        assert!(
+            matches!(
+                on_submit,
+                Message::StoreAction(crate::data::Action::Work(_))
+            ),
+            "{:?}",
+            on_submit
         );
     }
 }

@@ -23,7 +23,7 @@ impl CurrentDayUI {
 }
 
 impl MainView for CurrentDayUI {
-    fn new() -> Box<Self> {
+    fn new(_settings: &Settings) -> Box<Self> {
         Box::new(Self {
             data: ActiveDay::default(),
             scroll_state: Default::default(),

@@ -19,6 +19,7 @@ use tracing_subscriber::Registry;
 
 use crate::conf::{InitialAction, MainAction, Settings, SettingsSer};
 use crate::data::Day;
+use crate::util::DefaultTimeline;
 
 mod conf;
 mod data;
@@ -200,6 +201,7 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
             resolution: resolution(b.resolution_minutes, from_file.as_ref())?,
             write_settings: b.write_settings,
             active_date: Day::today(),
+            timeline: Arc::new(DefaultTimeline),
         },
         remaining_args,
     ))

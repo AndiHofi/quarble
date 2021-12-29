@@ -1,5 +1,7 @@
 use crate::data::Day;
+use crate::util::{DefaultTimeline, Timeline, TimelineProvider};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Settings {
@@ -8,6 +10,14 @@ pub struct Settings {
     pub resolution: chrono::Duration,
     pub write_settings: bool,
     pub active_date: Day,
+    pub timeline: Timeline,
+}
+
+impl Settings {
+    pub fn with_timeline<T: TimelineProvider + 'static>(mut self, timeline: T) -> Self {
+        self.timeline = Arc::new(timeline);
+        self
+    }
 }
 
 impl Default for Settings {
@@ -18,6 +28,7 @@ impl Default for Settings {
             resolution: chrono::Duration::minutes(15),
             write_settings: false,
             active_date: Day::today(),
+            timeline: Arc::new(DefaultTimeline),
         }
     }
 }

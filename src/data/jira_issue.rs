@@ -8,7 +8,7 @@ pub struct JiraIssue {
 }
 
 impl JiraIssue {
-    pub fn create(id: String) -> anyhow::Result<JiraIssue> {
+    pub fn create(id: &str) -> anyhow::Result<JiraIssue> {
         match id.split_once('-') {
             Some((project, number)) => {
                 if !project.chars().all(|ch| ch.is_ascii_alphabetic()) {
