@@ -18,7 +18,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
 use crate::conf::{InitialAction, MainAction, Settings, SettingsSer};
-use crate::data::Day;
 use crate::util::DefaultTimeline;
 
 mod conf;
@@ -194,17 +193,15 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
         None
     };
 
-    Ok((
-        Settings {
-            settings_location: b.config_file,
-            db_dir: db_location(b.db_dir, from_file.as_ref())?,
-            resolution: resolution(b.resolution_minutes, from_file.as_ref())?,
-            write_settings: b.write_settings,
-            active_date: Day::today(),
-            timeline: Arc::new(DefaultTimeline),
-        },
-        remaining_args,
-    ))
+    let db_dir = db_location(b.db_dir, from_file.as_ref())?;
+    let resolution = resolution(b.resolution_minutes, from_file.as_ref())?;
+    let mut settings = Settings::from_ser(from_file);
+    settings.db_dir = db_dir;
+    settings.write_settings = b.write_settings;
+    settings.resolution = resolution;
+    settings.settings_location = b.config_file;
+
+    Ok((settings, remaining_args))
 }
 
 fn today() -> NaiveDate {

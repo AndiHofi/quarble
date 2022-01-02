@@ -61,6 +61,12 @@ impl Display for Day {
     }
 }
 
+impl From<chrono::NaiveDate> for Day {
+    fn from(date: chrono::NaiveDate) -> Self {
+        Day { date }
+    }
+}
+
 impl serde::Serialize for Day {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

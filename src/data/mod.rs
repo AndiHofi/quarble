@@ -1,15 +1,13 @@
-pub use action::{Action, TimedAction, DayEnd, DayStart, Doctor, ZA};
+pub use action::{Action, DayEnd, DayStart, Doctor, TimedAction, ZA};
 pub use day::{Day, DayForwarder, WeekDayForwarder};
 pub use jira_issue::JiraIssue;
 pub use location::Location;
-pub use task::Task;
 pub use work::{Work, WorkEnd, WorkEvent, WorkStart};
 
 mod action;
 mod day;
 mod jira_issue;
 mod location;
-mod task;
 mod work;
 mod work_day;
 

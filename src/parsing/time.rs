@@ -3,8 +3,10 @@ use std::num::NonZeroU32;
 use std::str::FromStr;
 
 use crate::parsing::parse_result::ParseResult;
+use crate::parsing::rest;
 use crate::parsing::round_mode::RoundMode;
 use chrono::Timelike;
+use regex::Regex;
 
 use crate::parsing::time_relative::TimeRelative;
 
@@ -62,6 +64,27 @@ impl Time {
 
     pub fn new(t: u32) -> Self {
         Self::hm(t / 60, t % 60)
+    }
+
+    pub fn parse_prefix(input: &str) -> (ParseResult<Time, ()>, &str) {
+        if let Some(c) = TIME_HM.captures(input) {
+            let h = u32::from_str(c.name("hour").unwrap().as_str()).unwrap();
+            let m = u32::from_str(c.name("minute").unwrap().as_str()).unwrap();
+            (Self::try_hm(h, m).into(), rest(c, input))
+        } else if let Some(c) = TIME_DEC.captures(input) {
+            let h = u32::from_str(c.name("hour").unwrap().as_str()).unwrap();
+            let dec = u32::from_str(c.name("dec").unwrap().as_str()).unwrap();
+            (Self::try_hm(h, (dec * 60) / 100).into(), rest(c, input))
+        } else if let Some(c) = TIME_SHORT.captures(input) {
+            let h = u32::from_str(c.name("hour").unwrap().as_str()).unwrap();
+            let m = u32::from_str(c.name("minute").unwrap().as_str()).unwrap();
+            (Self::try_hm(h, m).into(), rest(c, input))
+        } else if let Some(c) = TIME_H.captures(input) {
+            let h = u32::from_str(c.name("hour").unwrap().as_str()).unwrap();
+            (Self::try_hm(h, 0).into(), rest(c, input))
+        } else {
+            (ParseResult::None, input)
+        }
     }
 
     pub fn parse(input: &str) -> ParseResult<Time, ()> {
@@ -180,6 +203,13 @@ impl Time {
             }
         }
     }
+}
+
+lazy_static::lazy_static! {
+    static ref TIME_HM: Regex = Regex::new(r"^(?P<hour>[0-9]{1,2}):(?P<minute>[0-9]{1,2})\b").unwrap();
+    static ref TIME_SHORT: Regex = Regex::new(r"^(?P<hour>[0-9]{1,2})(?P<minute>[0-9]{2})\b").unwrap();
+    static ref TIME_H: Regex = Regex::new(r"^(?P<hour>[0-9]{1,2})\b").unwrap();
+    static ref TIME_DEC: Regex = Regex::new(r"^(?P<hour>[0-9]{1,2})\.(?P<dec>[0-9]{1,2})\b").unwrap();
 }
 
 impl From<Time> for chrono::NaiveTime {

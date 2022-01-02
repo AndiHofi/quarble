@@ -28,6 +28,7 @@ mod current_day;
 mod entry_edit;
 mod fast_day_end;
 mod fast_day_start;
+//mod issue_start_edit;
 pub mod main_action;
 mod style;
 mod util;
@@ -169,8 +170,9 @@ impl iced_winit::Program for Quarble {
                 Message::BookSingle => match &self.current_view {
                     CurrentView::Bs(_) => (),
                     _ => {
+                        let settings = self.settings.load_full();
                         self.current_view = CurrentView::Bs(BookSingleUI::for_active_day(
-                            &settings,
+                            settings,
                             self.active_day.as_ref(),
                         ));
                     }
@@ -256,9 +258,10 @@ impl iced_winit::Application for Quarble {
             InitialAction::FastEndDay => {
                 CurrentView::Fde(FastDayEnd::for_work_day(&guard, active_day.as_ref()))
             }
-            InitialAction::BookSingle => {
-                CurrentView::Bs(BookSingleUI::for_active_day(&guard, active_day.as_ref()))
-            }
+            InitialAction::BookSingle => CurrentView::Bs(BookSingleUI::for_active_day(
+                settings.load_full(),
+                active_day.as_ref(),
+            )),
         };
 
         let mut quarble = Quarble {
