@@ -21,6 +21,8 @@ pub enum InitialAction {
     FastStartDay,
     FastEndDay,
     BookSingle,
+    WorkStart,
+    WorkEnd,
 }
 
 impl Default for InitialAction {

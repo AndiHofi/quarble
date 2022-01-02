@@ -8,6 +8,10 @@ use std::collections::BTreeMap;
 lazy_static! {
     static ref ISSUE_SHORTCUT: Regex = Regex::new(r"^(?P<abbr>[a-zA-Z])\b").unwrap();
     static ref ISSUE: Regex = Regex::new(r"^(?P<id>([a-zA-Z]+-[0-9]+))").unwrap();
+    static ref ISSUE_CLIPBOARD: regex::Regex =
+        regex::RegexBuilder::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]+))(?:(?:\W)+(?P<comment>.*))?")
+            .build()
+            .unwrap();
 }
 
 #[derive(Clone, Debug, Default)]
@@ -72,6 +76,18 @@ impl IssueParser {
         }
     }
 }
+
+pub fn parse_issue_clipboard(input: &str) -> Option<JiraIssue> {
+    let c = ISSUE_CLIPBOARD.captures(input)?;
+    let id = c.name("id")?;
+
+    Some(JiraIssue {
+        ident: id.as_str().to_string(),
+        description: c.name("comment").map(|m| m.as_str().to_string()),
+        default_action: None,
+    })
+}
+
 fn matching<'a, 'b>(c: &'b Captures<'a>) -> &'a str {
     c.get(0).unwrap().as_str()
 }

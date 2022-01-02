@@ -1,10 +1,9 @@
 use crate::conf::Settings;
 use crate::data::{ActiveDay, JiraIssue, Work};
 use crate::parsing::parse_result::ParseResult;
-use crate::parsing::time::Time;
-use crate::ui::book_single::parsing::ClipRead;
+use crate::ui::clip_read::ClipRead;
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{input_message, style, MainView, Message, QElement};
+use crate::ui::{input_message, style, text, time_info, MainView, Message, QElement};
 use crate::util::Timeline;
 use iced_native::widget::Row;
 use iced_wgpu::TextInput;
@@ -138,19 +137,6 @@ impl MainView for BookSingleUI {
             _ => self.follow_up_msg(),
         }
     }
-}
-
-fn text<'a>(t: &str) -> QElement<'a> {
-    Text::new(t.to_string()).into()
-}
-
-fn time_info<'a>(now: Time, v: ParseResult<Time, ()>) -> QElement<'a> {
-    Text::new(
-        v.get_with_default(now)
-            .map(|e| e.to_string())
-            .unwrap_or_else(|| "invalid".to_string()),
-    )
-    .into()
 }
 
 fn task_info<'a>(v: ParseResult<&'a JiraIssue, &'a ()>, clipboard: &'a ClipRead) -> QElement<'a> {

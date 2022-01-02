@@ -3,45 +3,13 @@ use crate::data::Work;
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_relative::TimeRelative;
-use crate::parsing::{IssueParsed, IssueParser};
+use crate::parsing::{parse_issue_clipboard, IssueParsed, IssueParser};
+use crate::ui::clip_read::ClipRead;
 use crate::Settings;
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref ISSUE_NUM: regex::Regex =
-        regex::RegexBuilder::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]+))(?:(?:\W)+(?P<comment>.*))?")
-            .build()
-            .unwrap();
     static ref SEPARATOR: regex::Regex = regex::RegexBuilder::new(r"[ \t\n\r]+").build().unwrap();
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum ClipRead {
-    None,
-    Reading,
-    DoRead,
-    Invalid,
-    NoClip,
-    Unexpected,
-}
-
-impl Default for ClipRead {
-    fn default() -> Self {
-        ClipRead::None
-    }
-}
-
-impl ClipRead {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ClipRead::None => "",
-            ClipRead::Reading => "reading...",
-            ClipRead::DoRead => "read clipboard",
-            ClipRead::Invalid => "invalid clipboard",
-            ClipRead::NoClip => "no clipboard",
-            ClipRead::Unexpected => "unexpected",
-        }
-    }
 }
 
 #[derive(Default, Debug)]
@@ -63,63 +31,6 @@ impl WorkBuilder {
         parse(self, &settings, text)
     }
 
-    /*pub(super) fn parse_input(&mut self, text: &str, now: Time) {
-            let (text, msg) = if let Some((text, msg)) = text.split_once('#') {
-                (text, msg)
-            } else {
-                (text, "")
-            };
-
-            let orig = std::mem::take(&mut self.task);
-
-            let entries: Vec<_> = SEPARATOR.splitn(text, 4).collect();
-
-            self.start = ParseResult::None;
-            self.end = ParseResult::None;
-            self.msg = if msg.is_empty() {
-                Some(msg.to_string())
-            } else {
-                None
-            };
-
-            match *entries.as_slice() {
-                [s, e, i, m0, ref m @ ..] => {
-                    if msg.is_empty() {
-                        self.start = parse_input_rel(now, s, true);
-                        self.end = parse_input(now, e);
-                        self.task = parse_issue(i);
-                        self.msg = Some(if m.is_empty() {
-                            m0.to_string()
-                        } else {
-                            format!("{} {}", m0, m.join(" "))
-                        });
-                    } else {
-                        self.task = ParseResult::Invalid(())
-                    }
-                }
-                [s, e, i] => {
-                    self.start = parse_input_rel(now, s, true);
-                    self.end = parse_input(now, e);
-                    self.task = parse_issue(i);
-                }
-                [s, i] => {
-                    self.start = parse_input_rel(now, s, true);
-                    self.task = parse_issue(i);
-                }
-                [i] => {
-                    self.task = parse_issue(i);
-                }
-                [] => {
-                    self.start = ParseResult::Incomplete;
-                }
-            };
-
-            if self.needs_clipboard() && matches!(orig, ParseResult::Valid(_)) {
-                self.task = orig;
-                self.clipboard_reading = "";
-            }
-        }
-    */
     pub(super) fn apply_clipboard(&mut self, value: Option<String>) {
         self.clipboard_reading = ClipRead::None;
         if let ParseResult::None = self.task {
@@ -177,17 +88,6 @@ impl WorkBuilder {
             _ => None,
         }
     }
-}
-
-pub(super) fn parse_issue_clipboard(input: &str) -> Option<JiraIssue> {
-    let c = ISSUE_NUM.captures(input)?;
-    let id = c.name("id")?;
-
-    Some(JiraIssue {
-        ident: id.as_str().to_string(),
-        description: c.name("comment").map(|m| m.as_str().to_string()),
-        default_action: None,
-    })
 }
 
 fn parse(b: &mut WorkBuilder, settings: &Settings, input: &str) {

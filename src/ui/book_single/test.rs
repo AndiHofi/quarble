@@ -3,9 +3,9 @@
 use crate::data::{JiraIssue, Work};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
-use crate::parsing::IssueParser;
-use crate::ui::book_single::parsing::ClipRead;
+use crate::parsing::{parse_issue_clipboard, IssueParser};
 use crate::ui::book_single::{BookSingleMessage, BookSingleUI};
+use crate::ui::clip_read::ClipRead;
 use crate::ui::{MainView, Message};
 use crate::util::StaticTimeline;
 use crate::Settings;
@@ -94,7 +94,7 @@ fn test_parse_input_duration_absolute() {
 #[test]
 fn test_parse_valid_clipboard() {
     assert_eq!(
-        super::parsing::parse_issue_clipboard("CLIP-12345"),
+        parse_issue_clipboard("CLIP-12345"),
         Some(JiraIssue {
             ident: "CLIP-12345".to_string(),
             description: None,

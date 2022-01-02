@@ -13,22 +13,26 @@ use iced_winit::{Event, Program};
 use crate::conf::{InitialAction, MainAction, Settings};
 use crate::data::{Action, ActiveDay, Day, TimedAction};
 use crate::db::DB;
+use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::ui::book::Book;
 use crate::ui::book_single::{BookSingleMessage, BookSingleUI};
 use crate::ui::current_day::CurrentDayUI;
 use crate::ui::fast_day_end::{FastDayEnd, FastDayEndMessage};
 use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
+use crate::ui::issue_start_edit::{IssueStartEdit, IssueStartMessage};
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
+use crate::ui::work_start_edit::WorkStartEdit;
 use iced_native::clipboard;
 
 mod book;
 mod book_single;
+mod clip_read;
 mod current_day;
 mod entry_edit;
 mod fast_day_end;
 mod fast_day_start;
-//mod issue_start_edit;
+mod issue_start_edit;
 pub mod main_action;
 mod style;
 mod util;
@@ -52,6 +56,8 @@ pub enum Message {
     FastDayStart,
     FastDayEnd,
     BookSingle,
+    BookIssueStart,
+    BookIssueEnd,
     ReadClipboard,
     ClipboardValue(Option<String>),
     UpdateStart {
@@ -72,6 +78,7 @@ pub enum Message {
     Fde(FastDayEndMessage),
     CdUi(CurrentDayUI),
     Bs(BookSingleMessage),
+    Is(IssueStartMessage),
     StoreAction(Action),
     StoreSuccess,
     Error(String),
@@ -177,6 +184,16 @@ impl iced_winit::Program for Quarble {
                         ));
                     }
                 },
+                Message::BookIssueStart => match &self.current_view {
+                    CurrentView::Is(_) => (),
+                    _ => {
+                        let settings = self.settings.load_full();
+                        self.current_view = CurrentView::Is(IssueStartEdit::for_active_day(
+                            settings,
+                            self.active_day.as_ref(),
+                        ));
+                    }
+                },
                 Message::StoreAction(action) => {
                     if let Some(ref mut active_day) = self.active_day {
                         active_day.add_action(action);
@@ -210,6 +227,9 @@ impl iced_winit::Program for Quarble {
                     CurrentView::Bs(bs) => {
                         message = bs.update(m);
                     }
+                    CurrentView::Is(is) => {
+                        message = is.update(m);
+                    }
                     _ => {}
                 },
             }
@@ -227,6 +247,7 @@ impl iced_winit::Program for Quarble {
             CurrentView::CdUi(cdui) => cdui.view(&settings),
             CurrentView::Bs(bs) => bs.view(&settings),
             CurrentView::Exit(exit) => exit.view(&settings),
+            CurrentView::Is(is) => is.view(&settings),
         };
         Container::new(content)
             .padding(Padding::new(style::WINDOW_PADDING))
@@ -262,6 +283,11 @@ impl iced_winit::Application for Quarble {
                 settings.load_full(),
                 active_day.as_ref(),
             )),
+            InitialAction::WorkStart => CurrentView::Is(IssueStartEdit::for_active_day(
+                settings.load_full(),
+                active_day.as_ref(),
+            )),
+            InitialAction::WorkEnd => todo!(),
         };
 
         let mut quarble = Quarble {
@@ -332,12 +358,14 @@ fn handle_control_keyboard_event(key_event: iced_winit::keyboard::Event) -> Opti
 
 fn handle_control_shortcuts(key_code: KeyCode) -> Option<Message> {
     match key_code {
-        KeyCode::V => Some(Message::View),
-        KeyCode::B => Some(Message::Book),
         KeyCode::I => Some(Message::BookSingle),
-        KeyCode::S => Some(Message::FastDayStart),
-        KeyCode::E => Some(Message::FastDayEnd),
+        KeyCode::O => Some(Message::FastDayStart),
+        KeyCode::L => Some(Message::FastDayEnd),
+        KeyCode::S => Some(Message::BookIssueStart),
+        KeyCode::E => Some(Message::BookIssueEnd),
         KeyCode::Key1 => Some(Message::CurrentDayUI),
+        KeyCode::Key2 => Some(Message::Book),
+        KeyCode::Key3 => Some(Message::View),
         _ => None,
     }
 }
@@ -353,12 +381,14 @@ fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Messa
                 match key_code {
                     KeyCode::Escape => Some(Message::Exit),
                     KeyCode::Tab => Some(Message::Next),
-                    KeyCode::V => Some(Message::View),
-                    KeyCode::B => Some(Message::Book),
                     KeyCode::I => Some(Message::BookSingle),
-                    KeyCode::S => Some(Message::FastDayStart),
-                    KeyCode::E => Some(Message::FastDayEnd),
+                    KeyCode::O => Some(Message::FastDayStart),
+                    KeyCode::L => Some(Message::FastDayEnd),
+                    KeyCode::S => Some(Message::BookIssueStart),
+                    KeyCode::E => Some(Message::BookIssueEnd),
                     KeyCode::Key1 => Some(Message::CurrentDayUI),
+                    KeyCode::Key2 => Some(Message::Book),
+                    KeyCode::Key3 => Some(Message::View),
                     _ => None,
                 }
             } else if modifiers.shift() {
@@ -383,6 +413,7 @@ enum CurrentView {
     Fde(Box<FastDayEnd>),
     CdUi(Box<CurrentDayUI>),
     Bs(Box<BookSingleUI>),
+    Is(Box<IssueStartEdit>),
     Exit(Exit),
 }
 
@@ -429,8 +460,8 @@ impl MainView for Exit {
 fn input_message(s: &str, actions: &[Action]) -> String {
     match min_max_booked(actions) {
         (None, None) => s.to_string(),
-        (Some(start), None) | (None, Some(start)) => format!("First action on {}", start),
-        (Some(start), Some(end)) => format!("Already booked from {} to {}", start, end),
+        (Some(start), None) | (None, Some(start)) => format!("{}: First action on {}", s, start),
+        (Some(start), Some(end)) => format!("{}: Already booked from {} to {}", s, start, end),
     }
 }
 
@@ -451,4 +482,17 @@ fn min_max_booked(actions: &[Action]) -> (Option<Time>, Option<Time>) {
             }
         }
     }
+}
+
+fn text<'a>(t: &str) -> QElement<'a> {
+    Text::new(t.to_string()).into()
+}
+
+fn time_info<'a>(now: Time, v: ParseResult<Time, ()>) -> QElement<'a> {
+    Text::new(
+        v.get_with_default(now)
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "invalid".to_string()),
+    )
+    .into()
 }
