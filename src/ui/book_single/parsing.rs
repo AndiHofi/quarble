@@ -5,6 +5,7 @@ use crate::parsing::time::Time;
 use crate::parsing::time_relative::TimeRelative;
 use crate::parsing::{parse_issue_clipboard, IssueParsed, IssueParser};
 use crate::ui::clip_read::ClipRead;
+use crate::util::Timeline;
 use crate::Settings;
 use lazy_static::lazy_static;
 
@@ -28,7 +29,7 @@ impl WorkBuilder {
     }
 
     pub(super) fn parse_input(&mut self, settings: &Settings, text: &str) {
-        parse(self, &settings, text)
+        parse(self, settings, text)
     }
 
     pub(super) fn apply_clipboard(&mut self, value: Option<String>) {
@@ -96,13 +97,16 @@ fn parse(b: &mut WorkBuilder, settings: &Settings, input: &str) {
         Dur(TimeRelative),
     }
 
-    fn parse_time(now: Time, input: &str) -> (ParseResult<TorD, ()>, &str) {
-        let t1 = Time::parse_prefix(input);
+    fn parse_time<'a, 'b>(
+        timeline: &'b Timeline,
+        input: &'a str,
+    ) -> (ParseResult<TorD, ()>, &'a str) {
+        let t1 = Time::parse_with_offset(timeline, input);
         let t1 = match t1 {
             (ParseResult::None | ParseResult::Incomplete, _) => {
                 let (tr, rest) = TimeRelative::parse_relative(input);
                 (
-                    tr.and_then(|r| now.try_add_relative(r).into())
+                    tr.and_then(|r| timeline.time_now().try_add_relative(r).into())
                         .map(TorD::Time),
                     rest,
                 )
@@ -119,17 +123,17 @@ fn parse(b: &mut WorkBuilder, settings: &Settings, input: &str) {
         }
     }
 
-    let now = settings.timeline.time_now();
+    let timeline = &settings.timeline;
     let input = input.trim_start();
 
-    let (t1, rest) = parse_time(now, input);
+    let (t1, rest) = parse_time(&settings.timeline, input);
     let rest = rest.trim_start();
     // just avoid double_parsing when input contains no times at all
     // if may be removed for better readability but worse performance
     let (t2, rest) = if t1.is_empty() {
         (ParseResult::None, rest)
     } else {
-        parse_time(now, rest)
+        parse_time(&settings.timeline, rest)
     };
 
     let (start, end) = match (t1, t2) {
@@ -147,6 +151,7 @@ fn parse(b: &mut WorkBuilder, settings: &Settings, input: &str) {
             (s, ParseResult::Valid(e))
         }
         (ParseResult::Valid(TorD::Dur(dur)), ParseResult::None | ParseResult::Incomplete) => {
+            let now = timeline.time_now();
             let s: ParseResult<Time, ()> = now.try_add_relative(-dur).into();
             (s, ParseResult::Valid(now))
         }
@@ -184,15 +189,16 @@ fn parse_from_issue<'a, 'b>(
     input: &'a str,
 ) -> (IssueParsed<'a>, Option<&'a str>) {
     let issue = ip.parse_task(input);
-    match issue {
-        i
-        @
+    if matches!(
+        issue,
         IssueParsed {
             r: ParseResult::Invalid(_) | ParseResult::Incomplete,
             ..
-        } => return (i, None),
-        _ => (),
-    };
+        }
+    ) {
+        return (issue, None);
+    }
+
     let rest = issue.rest.trim();
     let comment = if rest.is_empty() { None } else { Some(rest) };
     (issue, comment)

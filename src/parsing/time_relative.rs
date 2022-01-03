@@ -33,7 +33,7 @@ mod parse {
         static ref JUST_MINUTES: Regex = Regex::new(r"^(?P<minute>[0-9]{1,3})\b").unwrap();
     }
 
-    pub(super) fn parse_duration<'a>(input: &'a str) -> (ParseResult<TimeRelative, ()>, &'a str) {
+    pub(super) fn parse_duration(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
         if let Some(c) = POSITIVE_DURATION_HOUR.captures(input) {
             (take_hm(false, &c), rest(c, input))
         } else if let Some(c) = POSITIVE_DURATION_MINUTE.captures(input) {
@@ -78,8 +78,7 @@ mod parse {
 
     fn take_negative(c: &Captures) -> bool {
         let sign = c.name("sign").unwrap().as_str();
-        let negative = sign == "-";
-        negative
+        sign == "-"
     }
 
     fn take_hm(negative: bool, c: &Captures) -> ParseResult<TimeRelative, ()> {

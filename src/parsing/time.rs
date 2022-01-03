@@ -9,6 +9,7 @@ use chrono::Timelike;
 use regex::Regex;
 
 use crate::parsing::time_relative::TimeRelative;
+use crate::util::Timeline;
 
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Time {
@@ -84,6 +85,23 @@ impl Time {
             (Self::try_hm(h, 0).into(), rest(c, input))
         } else {
             (ParseResult::None, input)
+        }
+    }
+
+    pub fn parse_with_offset<'a, 'b>(
+        timeline: &'b Timeline,
+        input: &'a str,
+    ) -> (ParseResult<Time, ()>, &'a str) {
+        let t1 = Time::parse_prefix(input);
+        match t1 {
+            (ParseResult::None | ParseResult::Incomplete, _) => {
+                let (tr, rest) = TimeRelative::parse_relative(input);
+                (
+                    tr.and_then(|r| timeline.time_now().try_add_relative(r).into()),
+                    rest,
+                )
+            }
+            absolute => absolute,
         }
     }
 

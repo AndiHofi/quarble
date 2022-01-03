@@ -28,9 +28,7 @@ pub struct IssueParsed<'a> {
 
 impl IssueParser {
     pub fn new(shortcuts: BTreeMap<char, JiraIssue>) -> Self {
-        Self {
-            shortcuts: shortcuts.clone(),
-        }
+        Self { shortcuts }
     }
 
     pub fn shortcuts(&self) -> &BTreeMap<char, JiraIssue> {

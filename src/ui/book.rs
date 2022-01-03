@@ -13,6 +13,16 @@ pub(super) struct Book {
 }
 
 impl Book {
+    pub fn new(_settings: &Settings) -> Box<Self> {
+        let first = WorkStartEdit::new(0);
+        let second = WorkEntryEdit::new(1);
+        Box::new(Book {
+            entries: vec![first, second],
+            current: 0,
+            scroll_state: Default::default(),
+        })
+    }
+
     fn update_current(&mut self) {
         if !self
             .entries
@@ -30,16 +40,6 @@ impl Book {
 }
 
 impl MainView for Book {
-    fn new(_settings: &Settings) -> Box<Self> {
-        let first = WorkStartEdit::new(0);
-        let second = WorkEntryEdit::new(1);
-        Box::new(Book {
-            entries: vec![first, second],
-            current: 0,
-            scroll_state: Default::default(),
-        })
-    }
-
     fn view(&mut self, settings: &Settings) -> QElement {
         let date = format!("Date: {}", settings.active_date);
         let resolution = format!("Resolution: {} min", settings.resolution.num_minutes());

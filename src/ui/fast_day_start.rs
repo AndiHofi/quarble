@@ -6,7 +6,7 @@ use crate::data::{Action, ActiveDay, DayStart, Location, TimedAction};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_limits, InvalidTime, TimeLimit, TimeResult};
-use crate::ui::{input_message, style, MainView, Message, QElement};
+use crate::ui::{input_message, style, unbooked_time_for_day, MainView, Message, QElement};
 use crate::util::Timeline;
 
 #[derive(Clone, Debug)]
@@ -28,11 +28,10 @@ pub(super) struct FastDayStart {
 impl FastDayStart {
     pub fn for_work_day(settings: &Settings, work_day: Option<&ActiveDay>) -> Box<Self> {
         let (message, limits) = if let Some(work_day) = work_day {
-            let mut actions = work_day.actions().to_vec();
-            actions.sort();
+            let actions = work_day.actions();
             (
-                start_day_message(&actions),
-                valid_time_limits_for_day_start(&actions),
+                input_message("Start working day", actions),
+                unbooked_time_for_day(actions),
             )
         } else {
             ("Start working day".to_string(), Vec::default())
@@ -114,10 +113,6 @@ impl DayStartBuilder {
     }
 }
 
-fn start_day_message(actions: &[Action]) -> String {
-    input_message("Start working day", actions)
-}
-
 fn min_max_booked(actions: &[Action]) -> (Option<Time>, Option<Time>) {
     match actions {
         [] => (None, None),
@@ -165,10 +160,6 @@ fn valid_time_limits_for_day_start(actions: &[Action]) -> Vec<TimeLimit> {
 }
 
 impl MainView for FastDayStart {
-    fn new(settings: &Settings) -> Box<Self> {
-        FastDayStart::for_work_day(settings, None)
-    }
-
     fn view(&mut self, _settings: &Settings) -> QElement {
         let loc_str = match self.builder.location.as_ref() {
             ParseResult::Valid(t) => t.to_string(),
@@ -235,7 +226,6 @@ fn on_submit_message(value: Option<&DayStart>) -> Message {
 #[cfg(test)]
 mod test {
     use crate::ui::fast_day_start::FastDayStart;
-    use crate::ui::MainView;
     use crate::util::StaticTimeline;
     use crate::Settings;
 
@@ -250,7 +240,7 @@ mod test {
         let timeline = StaticTimeline::parse("2021-12-29 10:00");
         let settings = Settings::default().with_timeline(timeline);
         for input in i {
-            let mut fds = FastDayStart::new(&settings);
+            let mut fds = FastDayStart::for_work_day(&settings, None);
             fds.parse_value(*input);
 
             eprintln!(

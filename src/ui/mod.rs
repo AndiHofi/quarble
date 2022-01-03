@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use arc_swap::ArcSwap;
@@ -15,14 +16,15 @@ use crate::data::{Action, ActiveDay, Day, TimedAction};
 use crate::db::DB;
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
+use crate::parsing::time_limit::TimeLimit;
 use crate::ui::book::Book;
 use crate::ui::book_single::{BookSingleMessage, BookSingleUI};
 use crate::ui::current_day::CurrentDayUI;
 use crate::ui::fast_day_end::{FastDayEnd, FastDayEndMessage};
 use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
+use crate::ui::issue_end_edit::{IssueEndEdit, IssueEndMessage};
 use crate::ui::issue_start_edit::{IssueStartEdit, IssueStartMessage};
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
-use crate::ui::work_start_edit::WorkStartEdit;
 use iced_native::clipboard;
 
 mod book;
@@ -32,6 +34,7 @@ mod current_day;
 mod entry_edit;
 mod fast_day_end;
 mod fast_day_start;
+mod issue_end_edit;
 mod issue_start_edit;
 pub mod main_action;
 mod style;
@@ -79,6 +82,7 @@ pub enum Message {
     CdUi(CurrentDayUI),
     Bs(BookSingleMessage),
     Is(IssueStartMessage),
+    Ie(IssueEndMessage),
     StoreAction(Action),
     StoreSuccess,
     Error(String),
@@ -194,6 +198,16 @@ impl iced_winit::Program for Quarble {
                         ));
                     }
                 },
+                Message::BookIssueEnd => match &self.current_view {
+                    CurrentView::Ie(_) => (),
+                    _ => {
+                        let settings = self.settings.load_full();
+                        self.current_view = CurrentView::Ie(IssueEndEdit::for_active_day(
+                            settings,
+                            self.active_day.as_ref(),
+                        ))
+                    }
+                },
                 Message::StoreAction(action) => {
                     if let Some(ref mut active_day) = self.active_day {
                         active_day.add_action(action);
@@ -230,6 +244,9 @@ impl iced_winit::Program for Quarble {
                     CurrentView::Is(is) => {
                         message = is.update(m);
                     }
+                    CurrentView::Ie(ie) => {
+                        message = ie.update(m);
+                    }
                     _ => {}
                 },
             }
@@ -248,6 +265,7 @@ impl iced_winit::Program for Quarble {
             CurrentView::Bs(bs) => bs.view(&settings),
             CurrentView::Exit(exit) => exit.view(&settings),
             CurrentView::Is(is) => is.view(&settings),
+            CurrentView::Ie(ie) => ie.view(&settings),
         };
         Container::new(content)
             .padding(Padding::new(style::WINDOW_PADDING))
@@ -283,11 +301,14 @@ impl iced_winit::Application for Quarble {
                 settings.load_full(),
                 active_day.as_ref(),
             )),
-            InitialAction::WorkStart => CurrentView::Is(IssueStartEdit::for_active_day(
+            InitialAction::IssueStart => CurrentView::Is(IssueStartEdit::for_active_day(
                 settings.load_full(),
                 active_day.as_ref(),
             )),
-            InitialAction::WorkEnd => todo!(),
+            InitialAction::IssueEnd => CurrentView::Ie(IssueEndEdit::for_active_day(
+                settings.load_full(),
+                active_day.as_ref(),
+            )),
         };
 
         let mut quarble = Quarble {
@@ -414,12 +435,11 @@ enum CurrentView {
     CdUi(Box<CurrentDayUI>),
     Bs(Box<BookSingleUI>),
     Is(Box<IssueStartEdit>),
+    Ie(Box<IssueEndEdit>),
     Exit(Exit),
 }
 
 trait MainView {
-    fn new(settings: &Settings) -> Box<Self>;
-
     fn view(&mut self, settings: &Settings) -> QElement;
 
     fn update(&mut self, msg: Message) -> Option<Message>;
@@ -429,10 +449,13 @@ type QElement<'a> = Element<'a, Message, <Quarble as iced_winit::Program>::Rende
 
 struct ViewBookings {}
 
-impl MainView for ViewBookings {
-    fn new(_settings: &Settings) -> Box<Self> {
+impl ViewBookings {
+    pub fn new(_settings: &Settings) -> Box<Self> {
         Box::new(ViewBookings {})
     }
+}
+
+impl MainView for ViewBookings {
     fn view(&mut self, _settings: &Settings) -> QElement {
         Text::new("show").into()
     }
@@ -443,11 +466,13 @@ impl MainView for ViewBookings {
 
 struct Exit;
 
-impl MainView for Exit {
-    fn new(_settings: &Settings) -> Box<Self> {
+impl Exit {
+    pub fn new(_settings: &Settings) -> Box<Self> {
         Box::new(Exit)
     }
+}
 
+impl MainView for Exit {
     fn view(&mut self, _settings: &Settings) -> QElement {
         Text::new("exiting ...").into()
     }
@@ -457,7 +482,7 @@ impl MainView for Exit {
     }
 }
 
-fn input_message(s: &str, actions: &[Action]) -> String {
+fn input_message(s: &str, actions: &BTreeSet<Action>) -> String {
     match min_max_booked(actions) {
         (None, None) => s.to_string(),
         (Some(start), None) | (None, Some(start)) => format!("{}: First action on {}", s, start),
@@ -465,14 +490,17 @@ fn input_message(s: &str, actions: &[Action]) -> String {
     }
 }
 
-fn min_max_booked(actions: &[Action]) -> (Option<Time>, Option<Time>) {
-    match actions {
-        [] => (None, None),
-        [first] => {
+fn min_max_booked(actions: &BTreeSet<Action>) -> (Option<Time>, Option<Time>) {
+    let mut iter = actions.iter();
+    let first = iter.next();
+    let last = iter.next_back();
+    match (first, last) {
+        (None, _) => (None, None),
+        (Some(first), None) => {
             let (s, e) = first.times();
             (Some(s), e)
         }
-        [first, .., last] => {
+        (Some(first), Some(last)) => {
             let (s, _) = first.times();
             let (e1, e2) = last.times();
             if e2.is_some() {
@@ -484,8 +512,35 @@ fn min_max_booked(actions: &[Action]) -> (Option<Time>, Option<Time>) {
     }
 }
 
-fn text<'a>(t: &str) -> QElement<'a> {
-    Text::new(t.to_string()).into()
+fn unbooked_time_for_day(actions: &BTreeSet<Action>) -> Vec<TimeLimit> {
+    let mut result = Vec::new();
+    let mut current_limit = TimeLimit::default();
+    for action in actions {
+        let (min, max) = action.times();
+        let (f, s) = if let Some(max) = max {
+            let sep = TimeLimit::simple(min, max);
+            current_limit.split(sep)
+        } else {
+            current_limit.split_at(min)
+        };
+        match (f, s) {
+            (TimeLimit::EMPTY, TimeLimit::EMPTY) => (),
+            (TimeLimit::EMPTY, s) => current_limit = s,
+            (f, TimeLimit::EMPTY) => current_limit = f,
+            (f, s) => {
+                result.push(f);
+                current_limit = s;
+            }
+        }
+    }
+
+    result.push(current_limit);
+
+    result
+}
+
+fn text<'a>(t: impl Into<String>) -> QElement<'a> {
+    Text::new(t).into()
 }
 
 fn time_info<'a>(now: Time, v: ParseResult<Time, ()>) -> QElement<'a> {

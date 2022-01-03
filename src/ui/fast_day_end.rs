@@ -1,12 +1,12 @@
 use iced_wgpu::TextInput;
 use iced_winit::widget::{text_input, Column, Row, Space, Text};
+use std::collections::BTreeSet;
 
 use crate::conf::Settings;
-use crate::data::{Action, ActiveDay, DayEnd, TimedAction};
+use crate::data::{Action, ActiveDay, DayEnd};
 use crate::parsing::parse_result::ParseResult;
-use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_limits, InvalidTime, TimeLimit, TimeResult};
-use crate::ui::{style, MainView, Message, QElement};
+use crate::ui::{min_max_booked, style, unbooked_time_for_day, MainView, Message, QElement};
 use crate::util::Timeline;
 
 #[derive(Clone, Debug)]
@@ -28,12 +28,8 @@ pub(super) struct FastDayEnd {
 impl FastDayEnd {
     pub fn for_work_day(settings: &Settings, work_day: Option<&ActiveDay>) -> Box<Self> {
         let (message, limits) = if let Some(work_day) = work_day {
-            let mut actions = work_day.actions().to_vec();
-            actions.sort();
-            (
-                end_day_message(&actions),
-                valid_time_limits_for_day_end(&actions),
-            )
+            let actions = work_day.actions();
+            (end_day_message(actions), unbooked_time_for_day(actions))
         } else {
             ("Start working day".to_string(), Vec::default())
         };
@@ -74,7 +70,7 @@ impl FastDayEnd {
     }
 }
 
-fn end_day_message(actions: &[Action]) -> String {
+fn end_day_message(actions: &BTreeSet<Action>) -> String {
     match min_max_booked(actions) {
         (None, None) => "End working day".to_string(),
         (Some(start), None) | (None, Some(start)) => format!("Last action on {}", start),
@@ -82,71 +78,7 @@ fn end_day_message(actions: &[Action]) -> String {
     }
 }
 
-fn min_max_booked(actions: &[Action]) -> (Option<Time>, Option<Time>) {
-    match actions {
-        [] => (None, None),
-        [first] => {
-            let (s, e) = first.times();
-            (Some(s), e)
-        }
-        [first, .., last] => {
-            let (s, _) = first.times();
-            let (e1, e2) = last.times();
-            if e2.is_some() {
-                (Some(s), e2)
-            } else {
-                (Some(s), Some(e1))
-            }
-        }
-    }
-}
-
-fn valid_time_limits_for_day_end(actions: &[Action]) -> Vec<TimeLimit> {
-    let mut result = Vec::new();
-    let mut current_limit = TimeLimit::default();
-    for action in actions {
-        let (min, max) = action.times();
-        let (f, s) = if let Some(max) = max {
-            let sep = TimeLimit::simple(min, max);
-            current_limit.split(sep)
-        } else {
-            current_limit.split_at(min)
-        };
-        match (f, s) {
-            (TimeLimit::EMPTY, TimeLimit::EMPTY) => (),
-            (TimeLimit::EMPTY, s) => current_limit = s,
-            (f, TimeLimit::EMPTY) => current_limit = f,
-            (f, s) => {
-                result.push(f);
-                current_limit = s;
-            }
-        }
-    }
-
-    result.push(current_limit);
-
-    result
-}
-
 impl MainView for FastDayEnd {
-    fn new(settings: &Settings) -> Box<Self> {
-        let timeline = settings.timeline.clone();
-        Box::new(FastDayEnd {
-            text: String::new(),
-            text_state: text_input::State::focused(),
-            value: Some(DayEnd {
-                ts: timeline.naive_now(),
-            }),
-            message: "Start working day".to_string(),
-            limits: Vec::default(),
-            builder: DayEndBuilder {
-                ts: ParseResult::Valid(timeline.time_now()),
-            },
-            bad_input: false,
-            timeline,
-        })
-    }
-
     fn view(&mut self, _settings: &Settings) -> QElement {
         let time_str = self
             .value
@@ -206,11 +138,10 @@ impl DayEndBuilder {
 mod test {
     use crate::parsing::time::Time;
     use crate::ui::fast_day_end::FastDayEnd;
-    use crate::ui::MainView;
     use chrono::Timelike;
 
-    use crate::util::TimelineProvider;
-    use crate::{DefaultTimeline, Settings};
+    use crate::util::{DefaultTimeline, TimelineProvider};
+    use crate::Settings;
 
     #[test]
     fn test_parse_value() {
@@ -226,7 +157,7 @@ mod test {
 
     fn p(i: &[&str]) {
         let settings = Settings::default();
-        let mut fde = FastDayEnd::new(&settings);
+        let mut fde = FastDayEnd::for_work_day(&settings, None);
         for input in i {
             fde.parse_value(input);
             eprintln!("'{}' -> {:?}", input, fde.builder);

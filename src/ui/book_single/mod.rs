@@ -34,7 +34,9 @@ impl BookSingleUI {
     }
 
     pub fn for_active_day(settings: Arc<Settings>, active_day: Option<&ActiveDay>) -> Box<Self> {
-        let actions = active_day.map(|a| a.actions()).unwrap_or_default();
+        let actions = active_day
+            .map(|a| a.actions())
+            .unwrap_or(ActiveDay::no_action());
         let timeline = settings.timeline.clone();
         Box::new(Self {
             input_state: text_input::State::focused(),
@@ -65,18 +67,6 @@ impl BookSingleUI {
 }
 
 impl MainView for BookSingleUI {
-    fn new(settings: &Settings) -> Box<Self> {
-        Box::new(Self {
-            input_state: text_input::State::focused(),
-            builder: Default::default(),
-            data: None,
-            input: String::new(),
-            input_message: input_message("Book issue", &[]),
-            timeline: settings.timeline.clone(),
-            settings: Arc::new(settings.clone()),
-        })
-    }
-
     fn view(&mut self, settings: &Settings) -> QElement {
         let on_submit = self.on_submit_message(settings);
 

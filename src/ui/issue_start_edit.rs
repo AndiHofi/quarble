@@ -34,7 +34,9 @@ impl IssueStartEdit {
             input: String::new(),
             message: input_message(
                 "Start issue: ",
-                active_day.map(|d| d.actions()).unwrap_or(&[]),
+                active_day
+                    .map(|d| d.actions())
+                    .unwrap_or(ActiveDay::no_action()),
             ),
             builder: IssueStartBuilder::default(),
             settings,
@@ -52,10 +54,6 @@ impl IssueStartEdit {
 }
 
 impl MainView for IssueStartEdit {
-    fn new(settings: &Settings) -> Box<Self> {
-        IssueStartEdit::for_active_day(Arc::new(settings.clone()), None)
-    }
-
     fn view(&mut self, _settings: &Settings) -> QElement {
         let on_submit = self
             .builder
@@ -136,7 +134,7 @@ impl IssueStartBuilder {
     }
 
     fn parse_input(&mut self, settings: &Settings, input: &str) {
-        let (time, input) = Time::parse_prefix(input);
+        let (time, input) = Time::parse_with_offset(&settings.timeline, input);
         let IssueParsed {
             r: issue,
             input: matching,

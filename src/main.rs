@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(clippy::or_fun_call)]
 use std::cell::RefCell;
 use std::fs::OpenOptions;
 use std::io::{BufReader, Write};
@@ -18,7 +19,6 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
 use crate::conf::{InitialAction, MainAction, Settings, SettingsSer};
-use crate::util::DefaultTimeline;
 
 mod conf;
 mod data;

@@ -23,13 +23,6 @@ impl CurrentDayUI {
 }
 
 impl MainView for CurrentDayUI {
-    fn new(_settings: &Settings) -> Box<Self> {
-        Box::new(Self {
-            data: ActiveDay::default(),
-            scroll_state: Default::default(),
-        })
-    }
-
     fn view<'a>(&'a mut self, _settings: &Settings) -> QElement<'a> {
         let day = self.data.get_day().to_string();
         let active_issue = self
