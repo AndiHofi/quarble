@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use arc_swap::ArcSwap;
 use iced_core::keyboard::{KeyCode, Modifiers};
-use iced_core::Padding;
+use iced_core::{Color, Padding};
 use iced_wgpu::Text;
 use iced_winit::settings::SettingsWindowConfigurator;
 use iced_winit::widget::Container;
@@ -267,9 +267,15 @@ impl iced_winit::Program for Quarble {
             CurrentView::Is(is) => is.view(&settings),
             CurrentView::Ie(ie) => ie.view(&settings),
         };
-        Container::new(content)
+        let element: QElement = Container::new(content)
             .padding(Padding::new(style::WINDOW_PADDING))
-            .into()
+            .into();
+
+        if self.settings.load().debug {
+            element.explain(Color::new(0.5, 0.5, 0.5, 0.5))
+        } else {
+            element
+        }
     }
 }
 
@@ -309,6 +315,7 @@ impl iced_winit::Application for Quarble {
                 settings.load_full(),
                 active_day.as_ref(),
             )),
+            InitialAction::PrintDay => unreachable!("is command line"),
         };
 
         let mut quarble = Quarble {
@@ -456,7 +463,7 @@ impl ViewBookings {
 }
 
 impl MainView for ViewBookings {
-    fn view(&mut self, _settings: &Settings) -> QElement {
+    fn view(&mut self, _settings: &Settings) -> QElement<'_> {
         Text::new("show").into()
     }
     fn update(&mut self, _msg: Message) -> Option<Message> {

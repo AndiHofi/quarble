@@ -23,6 +23,7 @@ pub enum InitialAction {
     BookSingle,
     IssueStart,
     IssueEnd,
+    PrintDay,
 }
 
 impl Default for InitialAction {

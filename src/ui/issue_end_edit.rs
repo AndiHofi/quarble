@@ -70,10 +70,7 @@ impl IssueEndEdit {
 
         match (issue, self.time.as_ref()) {
             (Some(task), ParseResult::Valid(time)) => {
-                let action = WorkEnd {
-                    task,
-                    ts: time.into(),
-                };
+                let action = WorkEnd { task, ts: *time };
                 Message::StoreAction(Action::WorkEnd(action))
             }
             _ => Message::Update,

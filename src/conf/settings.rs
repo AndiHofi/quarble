@@ -14,6 +14,7 @@ pub struct Settings {
     pub active_date: Day,
     pub timeline: Timeline,
     pub issue_parser: IssueParser,
+    pub debug: bool,
 }
 
 impl Settings {
@@ -47,6 +48,7 @@ impl Default for Settings {
             active_date: timeline.today().into(),
             timeline,
             issue_parser: IssueParser::default(),
+            debug: false,
         }
     }
 }

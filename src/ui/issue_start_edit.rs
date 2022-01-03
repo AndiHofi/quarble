@@ -125,7 +125,7 @@ impl IssueStartBuilder {
     fn try_build(&self) -> Option<WorkStart> {
         match (&self.time, &self.issue, &self.comment) {
             (ParseResult::Valid(time), ParseResult::Valid(i), Some(c)) => Some(WorkStart {
-                ts: time.into(),
+                ts: *time,
                 task: i.clone(),
                 description: c.to_string(),
             }),

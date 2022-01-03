@@ -6,7 +6,8 @@ use crate::parsing::parse_result::ParseResult;
 use crate::parsing::rest;
 use crate::parsing::round_mode::RoundMode;
 use chrono::Timelike;
-use regex::Regex;
+use regex::{Captures, Regex};
+use serde::{Deserializer, Serializer};
 
 use crate::parsing::time_relative::TimeRelative;
 use crate::util::Timeline;
@@ -69,17 +70,13 @@ impl Time {
 
     pub fn parse_prefix(input: &str) -> (ParseResult<Time, ()>, &str) {
         if let Some(c) = TIME_HM.captures(input) {
-            let h = u32::from_str(c.name("hour").unwrap().as_str()).unwrap();
-            let m = u32::from_str(c.name("minute").unwrap().as_str()).unwrap();
-            (Self::try_hm(h, m).into(), rest(c, input))
+            (convert_hm(&c).into(), rest(c, input))
         } else if let Some(c) = TIME_DEC.captures(input) {
             let h = u32::from_str(c.name("hour").unwrap().as_str()).unwrap();
             let dec = u32::from_str(c.name("dec").unwrap().as_str()).unwrap();
             (Self::try_hm(h, (dec * 60) / 100).into(), rest(c, input))
         } else if let Some(c) = TIME_SHORT.captures(input) {
-            let h = u32::from_str(c.name("hour").unwrap().as_str()).unwrap();
-            let m = u32::from_str(c.name("minute").unwrap().as_str()).unwrap();
-            (Self::try_hm(h, m).into(), rest(c, input))
+            (convert_hm(&c).into(), rest(c, input))
         } else if let Some(c) = TIME_H.captures(input) {
             let h = u32::from_str(c.name("hour").unwrap().as_str()).unwrap();
             (Self::try_hm(h, 0).into(), rest(c, input))
@@ -103,42 +100,6 @@ impl Time {
             }
             absolute => absolute,
         }
-    }
-
-    pub fn parse(input: &str) -> ParseResult<Time, ()> {
-        if input.is_empty() {
-            return ParseResult::Incomplete;
-        } else if input.len() > 5 || input.starts_with('+') {
-            return ParseResult::Invalid(());
-        } else if let Some((h, m)) = input.split_once(':') {
-            if m.starts_with('+') {
-                return ParseResult::Invalid(());
-            }
-            if m.is_empty() {
-                return ParseResult::Incomplete;
-            }
-            if let (Ok(h), Ok(m)) = (u32::from_str(h), u32::from_str(m)) {
-                return Self::check_hm(h, m);
-            }
-        } else if let Some((h, p)) = input.split_once(&[',', '.'][..]) {
-            if p.starts_with('+') {
-                return ParseResult::Invalid(());
-            }
-            if p.is_empty() {
-                return ParseResult::Incomplete;
-            }
-            if let (Ok(h), Ok(p)) = (u32::from_str(h), u32::from_str(p)) {
-                return Self::check_hp(h, p);
-            }
-        } else if let Ok(t) = u32::from_str(input) {
-            if t < 24 {
-                return Self::check_hm(t, 0);
-            } else if t > 100 && t <= 2359 {
-                return Self::check_hm(t / 100, t % 100);
-            }
-        }
-
-        ParseResult::Invalid(())
     }
 
     pub fn check_hm(h: u32, m: u32) -> ParseResult<Time, ()> {
@@ -219,6 +180,50 @@ impl Time {
                     Self::hm(h, m)
                 }
             }
+        }
+    }
+}
+
+fn convert_hm(c: &Captures) -> Option<Time> {
+    let h = u32::from_str(c.name("hour").unwrap().as_str()).unwrap();
+    let m = u32::from_str(c.name("minute").unwrap().as_str()).unwrap();
+    Time::try_hm(h, m)
+}
+
+impl serde::Serialize for Time {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Time {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(TimeVisitor)
+    }
+}
+
+struct TimeVisitor;
+impl<'de> serde::de::Visitor<'de> for TimeVisitor {
+    type Value = Time;
+
+    fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "Time in format 'hh:mm'")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if let Some(c) = TIME_HM.captures(v) {
+            convert_hm(&c).ok_or_else(|| E::custom(format!("Out of range: {}", v)))
+        } else {
+            Err(E::custom(format!("invalid time: {}", v)))
         }
     }
 }

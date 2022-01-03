@@ -20,6 +20,7 @@ use tracing_subscriber::Registry;
 
 use crate::conf::{InitialAction, MainAction, Settings, SettingsSer};
 
+mod cmd;
 mod conf;
 mod data;
 mod db;
@@ -73,9 +74,15 @@ fn main_inner() -> anyhow::Result<()> {
         ["day_end"] => InitialAction::FastEndDay,
         ["book"] => InitialAction::BookSingle,
         ["booking"] => InitialAction::Book,
+        ["print_day"] => InitialAction::PrintDay,
         ["show"] | [] => InitialAction::Show,
         unexpected => bail!("Unexpected arguments: {}", unexpected.join(" ")),
     };
+
+    match initial_action {
+        InitialAction::PrintDay => cmd::print_active_day(db.load_day(settings.active_date)?),
+        _ => (),
+    }
 
     let work_day = if let Some(work_day) = db.load_day(settings.active_date)? {
         work_day
@@ -142,6 +149,7 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
         db_dir: Option<PathBuf>,
         resolution_minutes: Option<String>,
         write_settings: bool,
+        debug: bool,
     }
 
     let mut b: SettingsBuilder = SettingsBuilder::default();
@@ -162,6 +170,10 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
             }
             ["-W" | "--write-settings", rest @ ..] => {
                 b.write_settings = true;
+                remaining_args = rest;
+            }
+            ["--debug", rest @ ..] => {
+                b.debug = true;
                 remaining_args = rest;
             }
             _ => {
@@ -200,6 +212,7 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
     settings.write_settings = b.write_settings;
     settings.resolution = resolution;
     settings.settings_location = b.config_file;
+    settings.debug = b.debug;
 
     Ok((settings, remaining_args))
 }

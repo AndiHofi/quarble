@@ -42,7 +42,7 @@ impl FastDayStart {
             text_state: text_input::State::focused(),
             value: Some(DayStart {
                 location: Location::Office,
-                ts: timeline.naive_now(),
+                ts: timeline.time_now(),
             }),
             message,
             limits,

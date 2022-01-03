@@ -38,7 +38,7 @@ impl FastDayEnd {
             text: String::new(),
             text_state: text_input::State::focused(),
             value: Some(DayEnd {
-                ts: timeline.naive_now(),
+                ts: timeline.time_now(),
             }),
             message,
             limits,
