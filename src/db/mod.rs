@@ -2,7 +2,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
-use crate::data::{Day, JiraIssue, ActiveDay};
+use crate::data::{ActiveDay, Day, JiraIssue};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -21,7 +21,7 @@ pub enum DBErr {
 
 type DBResult<T> = Result<T, DBErr>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DB {
     root: PathBuf,
 }

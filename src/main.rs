@@ -19,6 +19,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
 use crate::conf::{InitialAction, MainAction, Settings, SettingsSer};
+use crate::ui::main_action::CmdId;
+use crate::ui::ViewId;
 
 mod cmd;
 mod conf;
@@ -70,19 +72,21 @@ fn main_inner() -> anyhow::Result<()> {
     debug!("{:?}", args_ref);
 
     let initial_action = match args_ref {
-        ["day_start"] => InitialAction::FastStartDay,
-        ["day_end"] => InitialAction::FastEndDay,
-        ["book"] => InitialAction::BookSingle,
-        ["booking"] => InitialAction::Book,
-        ["print_day"] => InitialAction::PrintDay,
-        ["show"] | [] => InitialAction::Show,
+        ["day_start"] => InitialAction::Ui(ViewId::FastDayStart),
+        ["day_end"] => InitialAction::Ui(ViewId::FastDayEnd),
+        ["book"] => InitialAction::Ui(ViewId::BookSingle),
+        ["booking"] => InitialAction::Ui(ViewId::Book),
+        ["show"] | [] => InitialAction::Ui(ViewId::CurrentDayUi),
+        ["print_day"] => InitialAction::Cmd(CmdId::PrintDay),
         unexpected => bail!("Unexpected arguments: {}", unexpected.join(" ")),
     };
 
-    match initial_action {
-        InitialAction::PrintDay => cmd::print_active_day(db.load_day(settings.active_date)?),
-        _ => (),
-    }
+    let initial_action = match initial_action {
+        InitialAction::Cmd(CmdId::PrintDay) => {
+            cmd::print_active_day(db.load_day(settings.active_date)?)
+        }
+        InitialAction::Ui(id) => id,
+    };
 
     let work_day = if let Some(work_day) = db.load_day(settings.active_date)? {
         work_day

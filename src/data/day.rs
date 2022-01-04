@@ -1,4 +1,7 @@
+use crate::parsing::parse_result::ParseResult;
+use crate::util::Timeline;
 use chrono::{Datelike, Weekday};
+use regex::Regex;
 use serde::{Deserializer, Serializer};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -41,6 +44,51 @@ impl Day {
             date: chrono::NaiveDate::from_ymd(year, month, day),
         }
     }
+
+    pub fn parse_day_relative(timeline: &Timeline, input: &str) -> ParseResult<Day, ()> {
+        if let Some(c) = RELATIVE_DAY.captures(input) {
+            let sign = c.name("sign").unwrap().as_str() == "+";
+            let days = i32::from_str(c.name("days").unwrap().as_str()).unwrap();
+            let mut value = timeline.today();
+            if sign {
+                for _ in 0..days {
+                    value = value.next(SimpleDayForwarder);
+                }
+            } else {
+                for _ in 0..days {
+                    value = value.prev(SimpleDayForwarder);
+                }
+            }
+            ParseResult::Valid(value)
+        } else {
+            parse_day(input).map_err(|_| ()).into()
+        }
+    }
+}
+
+fn parse_day(input: &str) -> Result<Day, String> {
+    if let Some((year, month_day)) = input.split_once('-') {
+        if let Some((month, day)) = month_day.split_once('-') {
+            return match (
+                i32::from_str(year),
+                u32::from_str(month),
+                u32::from_str(day),
+            ) {
+                (Ok(year), Ok(month), Ok(day)) => {
+                    let date = chrono::NaiveDate::from_ymd_opt(year, month, day)
+                        .ok_or_else(|| "bad date".to_string())?;
+                    Ok(Day { date })
+                }
+                _ => Err("invalid date".to_string()),
+            };
+        }
+    }
+
+    Err(format!("Invalid date: {}", input))
+}
+
+lazy_static::lazy_static! {
+    static ref RELATIVE_DAY: Regex = Regex::new(r"^(?P<sign>\+|-)(?P<days>[0-9]{1,2})\b").unwrap();
 }
 
 impl Default for Day {
@@ -98,24 +146,7 @@ impl<'de> serde::de::Visitor<'de> for DayVisitor {
     where
         E: serde::de::Error,
     {
-        if let Some((year, month_day)) = v.split_once('-') {
-            if let Some((month, day)) = month_day.split_once('-') {
-                return match (
-                    i32::from_str(year),
-                    u32::from_str(month),
-                    u32::from_str(day),
-                ) {
-                    (Ok(year), Ok(month), Ok(day)) => {
-                        let date = chrono::NaiveDate::from_ymd_opt(year, month, day)
-                            .ok_or_else(|| E::custom("bad date"))?;
-                        Ok(Day { date })
-                    }
-                    _ => Err(E::custom("invalid date")),
-                };
-            }
-        }
-
-        Err(E::custom(format!("Invalid date: {}", v)))
+        parse_day(v).map_err(E::custom)
     }
 }
 

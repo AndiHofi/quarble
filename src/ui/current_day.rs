@@ -1,27 +1,42 @@
 use crate::conf::Settings;
-use crate::data::{Action, ActiveDay};
+use crate::data::{Action, ActiveDay, Day};
+use crate::db::DB;
 use crate::parsing::time::Time;
 use crate::ui::util::h_space;
-use crate::ui::{style, text};
+use crate::ui::{style, text, SettingsRef};
 use crate::ui::{MainView, Message, QElement};
 use iced_core::alignment::Horizontal;
 use iced_core::Length;
+use iced_native::widget::{button, text_input, Button};
+use iced_wgpu::TextInput;
 use iced_winit::widget::{scrollable, Column, Container, Row, Scrollable, Space, Text};
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
+pub enum CurrentDayMessage {
+    DayTextChanged(String),
+    StartDayChange,
+    CommitDayChange,
+}
+
+#[derive(Clone, Debug)]
 pub struct CurrentDayUI {
     data: ActiveDay,
     scroll_state: scrollable::State,
+    day_select_button: button::State,
+    edit_state: Option<text_input::State>,
+    day_value: String,
+    settings: SettingsRef,
 }
 
 impl CurrentDayUI {
-    pub fn for_active_day(d: Option<&ActiveDay>) -> Box<Self> {
+    pub fn for_active_day(settings: SettingsRef, active_day: Option<&ActiveDay>) -> Box<Self> {
         Box::new(Self {
-            data: match d {
-                Some(d) => d.clone(),
-                None => ActiveDay::default(),
-            },
+            data: active_day.cloned().unwrap_or_default(),
             scroll_state: Default::default(),
+            day_select_button: button::State::new(),
+            edit_state: None,
+            day_value: String::new(),
+            settings,
         })
     }
 
@@ -112,12 +127,46 @@ impl MainView for CurrentDayUI {
         let content_style: Box<dyn iced_winit::widget::container::StyleSheet> =
             Box::new(style::ContentStyle);
 
+        let date_width = Length::Units(100);
+        let mut day_row = Vec::new();
+        let (on_press, message) = if self.edit_state.is_some() {
+            (Message::Cd(CurrentDayMessage::CommitDayChange), "Commit")
+        } else {
+            (Message::Cd(CurrentDayMessage::StartDayChange), "Change day")
+        };
+        if let Some(edit_state) = &mut self.edit_state {
+            let on_submit = Message::Cd(CurrentDayMessage::CommitDayChange);
+            day_row.push(
+                TextInput::new(edit_state, &day, &mut self.day_value, |v| {
+                    Message::Cd(CurrentDayMessage::DayTextChanged(v))
+                })
+                .on_submit(on_submit)
+                .width(date_width)
+                .into(),
+            )
+        } else {
+            day_row.push(
+                Text::new(day)
+                    .width(date_width)
+                    .horizontal_alignment(Horizontal::Left)
+                    .into(),
+            )
+        };
+        day_row.push(h_space(style::DSPACE));
+        day_row.push(
+            Button::new(&mut self.day_select_button, text(message))
+                .on_press(on_press)
+                .into(),
+        );
+
         Column::with_children(vec![
-            Text::new(day).into(),
+            Row::with_children(day_row).into(),
             Space::with_height(style::SPACE).into(),
             Text::new(active_issue).into(),
             Space::with_height(style::SPACE).into(),
             Container::new(entries_scroll)
+                .width(Length::Fill)
+                .height(Length::Fill)
                 .style(content_style)
                 .padding(style::SPACE_PX)
                 .into(),
@@ -125,7 +174,29 @@ impl MainView for CurrentDayUI {
         .into()
     }
 
-    fn update(&mut self, _msg: Message) -> Option<Message> {
-        None
+    fn update(&mut self, msg: Message) -> Option<Message> {
+        match msg {
+            Message::Cd(CurrentDayMessage::DayTextChanged(input)) => {
+                self.day_value = input;
+                None
+            }
+            Message::Cd(CurrentDayMessage::StartDayChange) => {
+                if self.edit_state.is_none() {
+                    self.edit_state = Some(text_input::State::focused());
+                }
+                None
+            }
+            Message::Cd(CurrentDayMessage::CommitDayChange) => {
+                if self.day_value.is_empty() {
+                    self.edit_state = None;
+                    None
+                } else {
+                    let parsed =
+                        Day::parse_day_relative(&self.settings.load().timeline, &self.day_value);
+                    parsed.get().map(Message::ChangeDay)
+                }
+            }
+            _ => None,
+        }
     }
 }

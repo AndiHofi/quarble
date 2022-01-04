@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use crate::data::Day;
 use crate::parsing::time::Time;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -13,11 +14,6 @@ pub fn now() -> chrono::NaiveDateTime {
 #[deprecated]
 pub fn time_now() -> chrono::NaiveTime {
     DefaultTimeline.now().time()
-}
-
-#[deprecated]
-pub fn today() -> chrono::NaiveDate {
-    DefaultTimeline.today()
 }
 
 #[derive(Clone, Debug)]
@@ -56,8 +52,8 @@ pub trait TimelineProvider: Debug + Send + Sync {
         self.now().time()
     }
 
-    fn today(&self) -> chrono::NaiveDate {
-        self.now().date()
+    fn today(&self) -> Day {
+        self.now().date().into()
     }
 }
 
