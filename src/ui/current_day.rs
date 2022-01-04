@@ -1,6 +1,5 @@
 use crate::conf::Settings;
 use crate::data::{Action, ActiveDay, Day};
-use crate::db::DB;
 use crate::parsing::time::Time;
 use crate::ui::util::h_space;
 use crate::ui::{style, text, SettingsRef};
