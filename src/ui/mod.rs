@@ -438,7 +438,7 @@ impl CurrentView {
                 active_day,
             )),
             ViewId::CurrentDayUi => {
-                CurrentView::CdUi(CurrentDayUI::for_active_day(settings.clone(), active_day))
+                CurrentView::CdUi(CurrentDayUI::for_active_day(settings, active_day))
             }
             ViewId::Exit => CurrentView::Exit(Exit),
         }

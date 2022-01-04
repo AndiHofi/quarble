@@ -98,12 +98,7 @@ struct DayStartBuilder {
 impl DayStartBuilder {
     fn try_build(&self, timeline: &Timeline) -> Option<DayStart> {
         let location = self.location.clone().or_default().get();
-        let ts = self
-            .ts
-            .clone()
-            .or(timeline.time_now())
-            .get()
-            .map(|t| t.into());
+        let ts = self.ts.clone().or(timeline.time_now()).get();
 
         if let (Some(location), Some(ts)) = (location, ts) {
             Some(DayStart { location, ts })

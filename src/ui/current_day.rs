@@ -136,7 +136,7 @@ impl MainView for CurrentDayUI {
         if let Some(edit_state) = &mut self.edit_state {
             let on_submit = Message::Cd(CurrentDayMessage::CommitDayChange);
             day_row.push(
-                TextInput::new(edit_state, &day, &mut self.day_value, |v| {
+                TextInput::new(edit_state, &day, &self.day_value, |v| {
                     Message::Cd(CurrentDayMessage::DayTextChanged(v))
                 })
                 .on_submit(on_submit)

@@ -16,10 +16,11 @@ pub struct ContentStyle;
 
 impl container::StyleSheet for ContentStyle {
     fn style(&self) -> Style {
-        let mut s = Style::default();
-        s.border_color = Color::BLACK;
-        s.border_radius = 2.0;
-        s.border_width = 1.0;
-        s
+        Style {
+            border_color: Color::BLACK,
+            border_radius: 2.0,
+            border_width: 1.0,
+            ..Style::default()
+        }
     }
 }

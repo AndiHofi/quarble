@@ -45,7 +45,7 @@ impl Default for Settings {
             db_dir: Default::default(),
             resolution: chrono::Duration::minutes(15),
             write_settings: false,
-            active_date: timeline.today().into(),
+            active_date: timeline.today(),
             timeline,
             issue_parser: IssueParser::default(),
             debug: false,

@@ -80,8 +80,8 @@ impl WorkBuilder {
 
                 let description = description.to_string();
                 Some(Work {
-                    start: start.into(),
-                    end: end.into(),
+                    start,
+                    end,
                     task,
                     description,
                 })

@@ -130,7 +130,7 @@ struct DayEndBuilder {
 
 impl DayEndBuilder {
     fn try_build(&self) -> Option<DayEnd> {
-        self.ts.get_ref().map(|ts| DayEnd { ts: (*ts).into() })
+        self.ts.get_ref().cloned().map(|ts| DayEnd { ts })
     }
 }
 

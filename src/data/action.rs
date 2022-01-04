@@ -28,24 +28,24 @@ impl Action {
 
     pub fn start(&self) -> Option<Time> {
         match self {
-            Action::Work(w) => Some(w.start.into()),
-            Action::WorkEvent(w) => Some(w.ts.into()),
-            Action::WorkStart(w) => Some(w.ts.into()),
-            Action::DayStart(w) => Some(w.ts.into()),
-            Action::ZA(w) => Some(w.start.into()),
-            Action::Doctor(w) => Some(w.start.into()),
+            Action::Work(w) => Some(w.start),
+            Action::WorkEvent(w) => Some(w.ts),
+            Action::WorkStart(w) => Some(w.ts),
+            Action::DayStart(w) => Some(w.ts),
+            Action::ZA(w) => Some(w.start),
+            Action::Doctor(w) => Some(w.start),
             _ => None,
         }
     }
 
     pub fn end(&self) -> Option<Time> {
         match self {
-            Action::Work(w) => Some(w.end.into()),
-            Action::WorkEvent(w) => Some(w.ts.into()),
-            Action::WorkEnd(w) => Some(w.ts.into()),
-            Action::DayEnd(w) => Some(w.ts.into()),
-            Action::ZA(w) => Some(w.end.into()),
-            Action::Doctor(w) => Some(w.end.into()),
+            Action::Work(w) => Some(w.end),
+            Action::WorkEvent(w) => Some(w.ts),
+            Action::WorkEnd(w) => Some(w.ts),
+            Action::DayEnd(w) => Some(w.ts),
+            Action::ZA(w) => Some(w.end),
+            Action::Doctor(w) => Some(w.end),
             _ => None,
         }
     }
