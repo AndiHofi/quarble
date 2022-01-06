@@ -71,6 +71,6 @@ pub fn parse_input_rel(now: Time, text: &str, negate: bool) -> ParseResult<Time,
     }
 }
 
-pub fn parse_input(now: Time, text: &str) -> ParseResult<Time, ()> {
+pub fn parse_day_end(now: Time, text: &str) -> ParseResult<Time, ()> {
     parse_input_rel(now, text, false)
 }

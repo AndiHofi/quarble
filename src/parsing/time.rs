@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroU32;
+use std::ops::{Add, Sub};
 use std::str::FromStr;
 
 use crate::parsing::parse_result::ParseResult;
@@ -60,8 +61,11 @@ impl Time {
         }
     }
 
-    pub fn try_new(t: u32) -> Option<Self> {
-        Self::try_hm(t / 60, t % 60)
+    pub fn try_new(t: i32) -> Option<Self> {
+        if !(0..=24 * 60).contains(&t) {
+            return None;
+        }
+        Self::try_hm(t as u32 / 60, t as u32 % 60)
     }
 
     pub fn new(t: u32) -> Self {
@@ -120,20 +124,8 @@ impl Time {
     }
 
     pub fn try_add_relative(self, tr: TimeRelative) -> Option<Self> {
-        let mut h = self.h as i32 + tr.offset_hours();
-        let mut m = self.m as i32 + tr.offset_minutes();
-        if m < 0 {
-            m += 60;
-            h -= 1;
-        } else if m >= 60 {
-            m -= 60;
-            h += 1;
-        }
-        if (0..24).contains(&h) && (0..60).contains(&m) {
-            Some(Time::hm(h as u32, m as u32))
-        } else {
-            None
-        }
+        let v = self.h as i32 * 60 + self.m as i32 + tr.offset_minutes();
+        Self::try_new(v)
     }
 
     pub fn h(&self) -> u32 {
@@ -275,17 +267,94 @@ impl Display for Time {
     }
 }
 
+impl Add<TimeRelative> for Time {
+    type Output = Time;
+
+    fn add(self, rhs: TimeRelative) -> Self::Output {
+        let x = TimeRelative::new(false, self.h, self.m).unwrap() + rhs;
+        if x.offset_minutes() < 0 {
+            Time::ZERO
+        } else {
+            Time::try_new(x.offset_minutes()).unwrap()
+        }
+    }
+}
+
+impl Sub for Time {
+    type Output = TimeRelative;
+
+    fn sub(self, rhs: Time) -> Self::Output {
+        let r = (rhs.h as i32) * 60 + rhs.m as i32;
+        let l = (self.h as i32) * 60 + self.m as i32;
+
+        let diff_minutes = l - r;
+        TimeRelative::from_minutes(diff_minutes).unwrap()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::parsing::time::Time;
     use crate::parsing::time_relative::TimeRelative;
 
     #[test]
-    fn sub_time() {
+    fn test_sub() {
+        assert_eq!(
+            Time::hm(24, 0) - Time::hm(0, 0),
+            TimeRelative::new(false, 24, 0).unwrap()
+        );
+        assert_eq!(
+            Time::hm(0, 0) - Time::hm(24, 0),
+            TimeRelative::new(true, 24, 0).unwrap()
+        );
+        assert_eq!(
+            Time::hm(0, 0) - Time::hm(0, 0),
+            TimeRelative::new(false, 0, 0).unwrap()
+        );
+        assert_eq!(
+            Time::hm(10, 0) - Time::hm(8, 30),
+            TimeRelative::new(false, 1, 30).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_try_add_relative() {
         let time = Time::hm(1, 0);
         assert_eq!(
             time.try_add_relative(TimeRelative::new(true, 0, 1).unwrap()),
             Some(Time::hm(0, 59))
         );
+    }
+
+    #[test]
+    fn test_time_add_duration() {
+        assert_eq!(
+            Time::hm(0, 0) + TimeRelative::from_minutes_sat(30),
+            Time::hm(0, 30)
+        );
+
+        assert_eq!(
+            Time::hm(0, 0) + TimeRelative::from_minutes_sat(600),
+            Time::hm(10, 0)
+        );
+        assert_eq!(
+            Time::hm(0, 0) + TimeRelative::from_minutes_sat(630),
+            Time::hm(10, 30)
+        );
+        assert_eq!(
+            Time::hm(9, 0) + TimeRelative::from_minutes_sat(120),
+            Time::hm(11, 0)
+        );
+    }
+
+    #[test]
+    fn test_ord() {
+        let t8 = Time::hm(8, 45);
+        let t9 = Time::hm(9, 15);
+        assert!(t8 < t9);
+        assert!(!(t9 < t8));
+        assert!(t8 <= t8);
+        assert!(t8 >= t8);
+        assert!(t9 > t8)
     }
 }

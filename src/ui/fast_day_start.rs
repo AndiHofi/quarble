@@ -5,7 +5,7 @@ use crate::conf::Settings;
 use crate::data::{Action, ActiveDay, DayStart, Location, TimedAction};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
-use crate::parsing::time_limit::{check_limits, InvalidTime, TimeLimit, TimeResult};
+use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeLimit, TimeResult};
 use crate::ui::{input_message, style, unbooked_time_for_day, MainView, Message, QElement};
 use crate::util::Timeline;
 
@@ -21,7 +21,6 @@ pub(super) struct FastDayStart {
     message: String,
     limits: Vec<TimeLimit>,
     builder: DayStartBuilder,
-    bad_input: bool,
     timeline: Timeline,
 }
 
@@ -50,18 +49,37 @@ impl FastDayStart {
                 ts: TimeResult::Valid(timeline.time_now()),
                 location: ParseResult::Valid(Location::Office),
             },
-            bad_input: false,
             timeline,
         })
     }
     fn update_text(&mut self, new_value: String) -> Option<Message> {
-        self.parse_value(&new_value);
+        self.builder
+            .parse_value(&self.timeline, &self.limits, &new_value);
         self.text = new_value;
         self.value = self.builder.try_build(&self.timeline);
         None
     }
+}
 
-    fn parse_value(&mut self, text: &str) {
+#[derive(Debug, Default)]
+pub struct DayStartBuilder {
+    location: ParseResult<Location, ()>,
+    ts: TimeResult,
+}
+
+impl DayStartBuilder {
+    pub fn try_build(&self, timeline: &Timeline) -> Option<DayStart> {
+        let location = self.location.clone().or_default().get();
+        let ts = self.ts.clone().or(timeline.time_now()).get();
+
+        if let (Some(location), Some(ts)) = (location, ts) {
+            Some(DayStart { location, ts })
+        } else {
+            None
+        }
+    }
+
+    pub fn parse_value(&mut self, timeline: &Timeline, limits: &[TimeLimit], text: &str) {
         fn parse_location(text: &str) -> (ParseResult<Location, ()>, &str) {
             let text = text.trim();
             let (location, text) = if text.starts_with(&['h', 'H'][..]) {
@@ -74,37 +92,17 @@ impl FastDayStart {
             (location, text)
         }
 
-        self.bad_input = false;
         let (location, text) = parse_location(text);
 
-        self.builder.location = location;
+        self.location = location;
 
-        let result = crate::parsing::parse_input(self.timeline.time_now(), text);
+        let result = crate::parsing::parse_day_end(timeline.time_now(), text);
 
         let result = result
             .map_invalid(|_| InvalidTime::Bad)
-            .and_then(|r| check_limits(r, &self.limits));
+            .and_then(|r| check_any_limit_overlaps(r, limits));
 
-        self.builder.ts = result;
-    }
-}
-
-#[derive(Debug, Default)]
-struct DayStartBuilder {
-    location: ParseResult<Location, ()>,
-    ts: TimeResult,
-}
-
-impl DayStartBuilder {
-    fn try_build(&self, timeline: &Timeline) -> Option<DayStart> {
-        let location = self.location.clone().or_default().get();
-        let ts = self.ts.clone().or(timeline.time_now()).get();
-
-        if let (Some(location), Some(ts)) = (location, ts) {
-            Some(DayStart { location, ts })
-        } else {
-            None
-        }
+        self.ts = result;
     }
 }
 
@@ -236,7 +234,7 @@ mod test {
         let settings = Settings::default().with_timeline(timeline);
         for input in i {
             let mut fds = FastDayStart::for_work_day(&settings, None);
-            fds.parse_value(*input);
+            fds.builder.parse_value(&fds.timeline, &fds.limits, *input);
 
             eprintln!(
                 "'{}' -> {:?}",

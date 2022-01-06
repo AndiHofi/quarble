@@ -84,22 +84,13 @@ impl TimedAction for Action {
 
 impl PartialOrd for Action {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
+        Some(TimedAction::cmp(self, other))
     }
 }
 
 impl Ord for Action {
     fn cmp(&self, other: &Self) -> Ordering {
-        let (self_start, self_end) = self.times();
-        let (other_start, other_end) = other.times();
-        self_start
-            .cmp(&other_start)
-            .then(match (self_end, other_end) {
-                (None, None) => Ordering::Equal,
-                (None, Some(_)) => Ordering::Less,
-                (Some(_), None) => Ordering::Greater,
-                (Some(s), Some(o)) => s.cmp(&o),
-            })
+        TimedAction::cmp(self, other)
     }
 }
 
@@ -191,6 +182,19 @@ impl Display for Action {
 
 pub trait TimedAction {
     fn times(&self) -> (Time, Option<Time>);
+
+    fn cmp(&self, other: &Self) -> Ordering {
+        let (self_start, self_end) = self.times();
+        let (other_start, other_end) = other.times();
+        self_start
+            .cmp(&other_start)
+            .then(match (self_end, other_end) {
+                (None, None) => Ordering::Equal,
+                (None, Some(_)) => Ordering::Less,
+                (Some(_), None) => Ordering::Greater,
+                (Some(s), Some(o)) => s.cmp(&o),
+            })
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]

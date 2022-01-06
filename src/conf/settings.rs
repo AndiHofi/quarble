@@ -1,4 +1,5 @@
 use crate::data::{Day, JiraIssue};
+use crate::parsing::time::Time;
 use crate::parsing::IssueParser;
 use crate::util::{DefaultTimeline, Timeline, TimelineProvider};
 use std::collections::BTreeMap;
@@ -14,6 +15,7 @@ pub struct Settings {
     pub active_date: Day,
     pub timeline: Timeline,
     pub issue_parser: IssueParser,
+    pub breaks: BreaksConfig,
     pub debug: bool,
 }
 
@@ -29,6 +31,7 @@ impl Settings {
                 db_dir: s.db_dir.clone(),
                 resolution: chrono::Duration::minutes(s.resolution_minutes as i64),
                 issue_parser: IssueParser::new(s.issue_shortcuts),
+                breaks: s.breaks,
                 ..Self::default()
             }
         } else {
@@ -48,6 +51,7 @@ impl Default for Settings {
             active_date: timeline.today(),
             timeline,
             issue_parser: IssueParser::default(),
+            breaks: Default::default(),
             debug: false,
         }
     }
@@ -56,8 +60,12 @@ impl Default for Settings {
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct SettingsSer {
     pub db_dir: PathBuf,
+    #[serde(default)]
     pub resolution_minutes: u32,
+    #[serde(default)]
     pub issue_shortcuts: BTreeMap<char, JiraIssue>,
+    #[serde(default)]
+    pub breaks: BreaksConfig,
 }
 
 impl SettingsSer {
@@ -66,6 +74,14 @@ impl SettingsSer {
             db_dir: settings.db_dir.clone(),
             resolution_minutes: settings.resolution.num_minutes() as u32,
             issue_shortcuts: settings.issue_parser.shortcuts().clone(),
+            breaks: settings.breaks.clone(),
         }
     }
+}
+
+#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
+pub struct BreaksConfig {
+    pub min_breaks_minutes: u32,
+    pub min_work_time_minutes: u32,
+    pub default_break: (Time, Time),
 }

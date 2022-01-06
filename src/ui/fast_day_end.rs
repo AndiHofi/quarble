@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use crate::conf::Settings;
 use crate::data::{Action, ActiveDay, DayEnd};
 use crate::parsing::parse_result::ParseResult;
-use crate::parsing::time_limit::{check_limits, InvalidTime, TimeLimit, TimeResult};
+use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeLimit, TimeResult};
 use crate::ui::{min_max_booked, style, unbooked_time_for_day, MainView, Message, QElement};
 use crate::util::Timeline;
 
@@ -60,11 +60,11 @@ impl FastDayEnd {
     fn parse_value(&mut self, text: &str) {
         self.bad_input = false;
 
-        let result = crate::parsing::parse_input(self.timeline.time_now(), text);
+        let result = crate::parsing::parse_day_end(self.timeline.time_now(), text);
 
         let result = result
             .map_invalid(|_| InvalidTime::Bad)
-            .and_then(|r| check_limits(r, &self.limits));
+            .and_then(|r| check_any_limit_overlaps(r, &self.limits));
 
         self.builder.ts = result;
     }

@@ -1,14 +1,171 @@
 use crate::parsing::parse_result::ParseResult;
+use crate::parsing::round_mode::RoundMode;
+use crate::parsing::time::Time;
 use crate::parsing::time_relative::parse::{
     parse_duration, parse_duration_relaxed, parse_time_relative,
 };
 use std::fmt::{Display, Formatter};
-use std::ops::Neg;
+use std::num::NonZeroU32;
+use std::ops::{Add, AddAssign, Neg, Sub};
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct TimeRelative {
     h: i8,
     m: i8,
+}
+
+impl Display for TimeRelative {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let (pre, h, m) = if self.h < 0 || self.m < 0 {
+            ("-", -self.h, -self.m)
+        } else {
+            ("+", self.h, self.m)
+        };
+        if h == 0 && m == 0 {
+            return f.write_str("0");
+        }
+
+        f.write_str(pre)?;
+        if h != 0 {
+            write!(f, "{}h", h)?;
+        }
+
+        if m != 0 {
+            write!(f, "{}m", m)?;
+        }
+        Ok(())
+    }
+}
+
+impl TimeRelative {
+    pub const ZERO: TimeRelative = TimeRelative::from_minutes_sat(0);
+
+    pub const fn new(neg: bool, h: u8, m: u8) -> Option<TimeRelative> {
+        if !(h == 24 && m == 0 || h < 24 && m < 60) {
+            None
+        } else if neg {
+            Some(TimeRelative {
+                h: 0 - (h as i8),
+                m: 0 - (m as i8),
+            })
+        } else {
+            Some(TimeRelative {
+                h: h as i8,
+                m: m as i8,
+            })
+        }
+    }
+
+    const fn new_unsafe(neg: bool, h: u8, m: u8) -> TimeRelative {
+        if !(h == 24 && m == 0 || h < 24 && m < 60) {
+            panic!("Invalid TimeRelative");
+        } else if neg {
+            TimeRelative {
+                h: 0 - (h as i8),
+                m: 0 - (m as i8),
+            }
+        } else {
+            TimeRelative {
+                h: h as i8,
+                m: m as i8,
+            }
+        }
+    }
+
+    pub fn from_minutes(minutes: i32) -> Option<TimeRelative> {
+        let negative = minutes < 0;
+        let minutes = minutes.abs();
+        if minutes > 60 * 24 {
+            return None;
+        }
+        Self::new(negative, (minutes / 60) as u8, (minutes % 60) as u8)
+    }
+
+    pub const fn from_minutes_sat(mut minutes: i32) -> TimeRelative {
+        let negative = minutes < 0;
+        if minutes < 0 {
+            minutes = -minutes;
+        };
+        if minutes > 24 * 60 {
+            minutes = 24 * 60;
+        }
+        Self::new_unsafe(negative, (minutes / 60) as u8, (minutes % 60) as u8)
+    }
+
+    pub fn is_negative(&self) -> bool {
+        self.h < 0 || self.m < 0
+    }
+
+    pub fn offset_minutes(&self) -> i32 {
+        self.h as i32 * 60 + self.m as i32
+    }
+
+    pub fn parse_relaxed(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
+        parse_duration_relaxed(input)
+    }
+
+    pub fn parse_prefix(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
+        parse_time_relative(input)
+    }
+
+    pub fn parse_relative(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
+        parse_time_relative(input)
+    }
+
+    pub fn parse_duration(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
+        parse_duration(input)
+    }
+
+    pub fn abs(self) -> Self {
+        Self {
+            h: self.h.abs(),
+            m: self.m.abs(),
+        }
+    }
+
+    pub fn round(self, mode: RoundMode, resolution: NonZeroU32) -> Self {
+        let rounded = Time::new(self.offset_minutes().abs() as u32).round(mode, resolution);
+        TimeRelative::new(self.is_negative(), rounded.h() as u8, rounded.m() as u8).unwrap()
+    }
+}
+
+fn check_h_m(neg: bool, h: u8, m: u8, tail: &str) -> (ParseResult<TimeRelative, ()>, &str) {
+    match TimeRelative::new(neg, h, m) {
+        Some(tr) => (ParseResult::Valid(tr), tail),
+        None => (ParseResult::Invalid(()), tail),
+    }
+}
+
+impl AddAssign for TimeRelative {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
+}
+
+impl Add for TimeRelative {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        TimeRelative::from_minutes_sat(self.offset_minutes() + rhs.offset_minutes())
+    }
+}
+
+impl Sub for TimeRelative {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        TimeRelative::from_minutes_sat(self.offset_minutes() - rhs.offset_minutes())
+    }
+}
+
+impl Neg for TimeRelative {
+    type Output = TimeRelative;
+    fn neg(self) -> Self::Output {
+        TimeRelative {
+            h: -self.h,
+            m: -self.m,
+        }
+    }
 }
 
 mod parse {
@@ -95,6 +252,9 @@ mod parse {
             .name("minute")
             .map(|m| u16::from_str(m.as_str()).unwrap())
             .unwrap_or(0);
+        if m > 24 * 60 {
+            return ParseResult::Invalid(());
+        }
         let h = (m / 60) as u8;
         let m = (m % 60) as u8;
         TimeRelative::new(negative, h, m).into()
@@ -134,8 +294,8 @@ mod parse {
                 parse_time_relative("-2h90m"),
                 (ParseResult::Invalid(()), "")
             );
-            assert_eq!(parse_time_relative("+999m"), (ParseResult::Invalid(()), ""));
-            assert_eq!(parse_time_relative("-999m"), (ParseResult::Invalid(()), ""));
+            assert_eq!(parse_time_relative("+999m"), (valid(16, 39), ""));
+            assert_eq!(parse_time_relative("-999m"), (valid(-16, -39), ""));
             assert_eq!(parse_time_relative("+90"), (valid(1, 30), ""));
             assert_eq!(parse_time_relative("-90"), (valid(-1, -30), ""));
             assert_eq!(parse_time_relative("++90"), (ParseResult::None, "++90"));
@@ -154,98 +314,12 @@ mod parse {
             assert_eq!(parse_duration("600m"), (valid(10, 0), ""));
             assert_eq!(parse_duration("25h"), (ParseResult::Invalid(()), ""));
             assert_eq!(parse_duration("2h90m"), (ParseResult::Invalid(()), ""));
-            assert_eq!(parse_duration("999m"), (ParseResult::Invalid(()), ""));
+            assert_eq!(parse_duration("999m"), (valid(16, 39), ""));
             assert_eq!(parse_duration("90"), (ParseResult::None, "90"));
             assert_eq!(parse_duration("hm"), (ParseResult::None, "hm"));
             assert_eq!(parse_duration("+90m"), (ParseResult::None, "+90m"));
 
             assert_eq!(parse_duration("1h 1h"), (valid(1, 0), " 1h"));
-        }
-    }
-}
-
-impl Display for TimeRelative {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let (pre, h, m) = if self.h < 0 || self.m < 0 {
-            ("-", -self.h, -self.m)
-        } else {
-            ("+", self.h, self.m)
-        };
-        if h == 0 && m == 0 {
-            return f.write_str("0");
-        }
-
-        f.write_str(pre)?;
-        if h != 0 {
-            write!(f, "{}h", h)?;
-        }
-
-        if m != 0 {
-            write!(f, "{}m", m)?;
-        }
-        Ok(())
-    }
-}
-
-impl TimeRelative {
-    pub fn new(neg: bool, h: u8, m: u8) -> Option<TimeRelative> {
-        if h > 12 || m >= 60 {
-            None
-        } else if neg {
-            Some(TimeRelative {
-                h: 0 - (h as i8),
-                m: 0 - (m as i8),
-            })
-        } else {
-            Some(TimeRelative {
-                h: h as i8,
-                m: m as i8,
-            })
-        }
-    }
-
-    pub fn is_negative(&self) -> bool {
-        self.h < 0 || self.m < 0
-    }
-
-    pub fn offset_hours(&self) -> i32 {
-        self.h as i32
-    }
-
-    pub fn offset_minutes(&self) -> i32 {
-        self.m as i32
-    }
-
-    pub fn parse_relaxed(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
-        parse_duration_relaxed(input)
-    }
-
-    pub fn parse_prefix(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
-        parse_time_relative(input)
-    }
-
-    pub fn parse_relative(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
-        parse_time_relative(input)
-    }
-
-    pub fn parse_duration(input: &str) -> (ParseResult<TimeRelative, ()>, &str) {
-        parse_duration(input)
-    }
-}
-
-fn check_h_m(neg: bool, h: u8, m: u8, tail: &str) -> (ParseResult<TimeRelative, ()>, &str) {
-    match TimeRelative::new(neg, h, m) {
-        Some(tr) => (ParseResult::Valid(tr), tail),
-        None => (ParseResult::Invalid(()), tail),
-    }
-}
-
-impl Neg for TimeRelative {
-    type Output = TimeRelative;
-    fn neg(self) -> Self::Output {
-        TimeRelative {
-            h: -self.h,
-            m: -self.m,
         }
     }
 }
@@ -296,9 +370,10 @@ mod test {
             ("-12h", "-12h", ""),
             ("+12h", "+12h", ""),
             ("+1h h", "+1h", " h"),
+            ("+24h h", "+24h", " h"),
         ])
         .unwrap();
-        assert_no_parse(&["+24h", "h", "++1h", "-+1h", "+h"]).unwrap();
+        assert_no_parse(&["+25h", "h", "++1h", "-+1h", "+h"]).unwrap();
     }
 
     #[test]

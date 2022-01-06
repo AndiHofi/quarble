@@ -8,6 +8,7 @@ pub use work::{Work, WorkEnd, WorkEvent, WorkStart};
 
 mod action;
 mod day;
+mod day_normalizer;
 mod jira_issue;
 mod location;
 mod work;
@@ -22,8 +23,9 @@ pub struct ActiveDay {
 
     actions: BTreeSet<Action>,
 }
+
 lazy_static::lazy_static! {
-static ref NO_ACTIONS_INT: BTreeSet<Action> = BTreeSet::new();
+    static ref NO_ACTIONS_INT: BTreeSet<Action> = BTreeSet::new();
 }
 
 impl ActiveDay {
