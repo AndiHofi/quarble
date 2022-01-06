@@ -9,7 +9,7 @@ use crate::parsing::time::Time;
 use crate::parsing::time_limit::{InvalidTime, TimeRange, TimeResult};
 use crate::parsing::time_relative::TimeRelative;
 use std::collections::BTreeSet;
-use std::num::{NonZeroU32, NonZeroU8};
+use std::num::NonZeroU32;
 
 #[cfg(test)]
 mod test;
@@ -34,11 +34,10 @@ impl From<&NormalizedDay> for WorkDay {
 
 #[derive(Debug)]
 pub struct Normalizer {
-    resolution: NonZeroU8,
-    overlap_limit: TimeRelative,
-    breaks_config: BreaksConfig,
-    combine_bookings: bool,
-    add_break: bool,
+    pub resolution: NonZeroU32,
+    pub breaks_config: BreaksConfig,
+    pub combine_bookings: bool,
+    pub add_break: bool,
 }
 
 impl Normalizer {
@@ -48,10 +47,16 @@ impl Normalizer {
 
         let mut splits = day_splits(&mut actions, &mut active_issue)?;
 
+        let mut free_standing = handle_free_standing(actions);
+        splits.append(&mut free_standing);
+
         let orig_breaks = calc_breaks(&splits);
 
         for range in &mut splits {
-            round_bookings(range, NonZeroU32::from(self.resolution))?;
+            round_bookings(range, self.resolution)?;
+            if self.combine_bookings {
+                combine_bookings(&mut range.work);
+            }
         }
 
         let mut entries = flatten_ranges(splits);
@@ -385,7 +390,7 @@ fn round_bookings(range: &mut FilledRange, resolution: NonZeroU32) -> Result<(),
     Ok(())
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BreaksInfo {
     pub work_time: TimeRelative,
     pub break_time: TimeRelative,
@@ -483,5 +488,47 @@ fn try_insert_break(config: &BreaksConfig, entries: &mut Vec<We>) {
                 )
             }
         }
+    }
+}
+
+fn handle_free_standing(entries: BTreeSet<Action>) -> Vec<FilledRange> {
+    entries
+        .into_iter()
+        .filter(|e| matches!(e, Action::Work(_)))
+        .map(|e| match e {
+            Action::Work(w) => FilledRange {
+                range: TimeRange::new(w.start, w.end),
+                work: vec![We {
+                    id: w.task.ident,
+                    description: w.description,
+                    start: w.start,
+                    end: w.end,
+                    implicit: false,
+                }],
+            },
+            _ => panic!("did filter for Work"),
+        })
+        .collect()
+}
+
+fn merge_adjacent_ranges(ranges: &mut Vec<FilledRange>) {
+    let orig = std::mem::take(ranges);
+
+    let mut iter = orig.into_iter();
+    if let Some(first) = iter.next() {
+        let last_end = first.range.max();
+        let mut current = first;
+
+        for mut r in iter {
+            if r.range.min() > last_end {
+                std::mem::swap(&mut current, &mut r);
+                ranges.push(r);
+            } else {
+                current.work.append(&mut r.work);
+                current.range = current.range.with_max(r.range.max());
+            }
+        }
+
+        ranges.push(current);
     }
 }

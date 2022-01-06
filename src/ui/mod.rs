@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use iced_core::keyboard::{KeyCode, Modifiers};
@@ -20,6 +21,7 @@ use crate::parsing::time_limit::TimeLimit;
 use crate::ui::book::Book;
 use crate::ui::book_single::{BookSingleMessage, BookSingleUI};
 use crate::ui::current_day::{CurrentDayMessage, CurrentDayUI};
+use crate::ui::export::{DayExportMessage, DayExportUi};
 use crate::ui::fast_day_end::{FastDayEnd, FastDayEndMessage};
 use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
 use crate::ui::issue_end_edit::{IssueEndEdit, IssueEndMessage};
@@ -32,6 +34,7 @@ mod book_single;
 mod clip_read;
 mod current_day;
 mod entry_edit;
+mod export;
 pub mod fast_day_end;
 pub mod fast_day_start;
 mod issue_end_edit;
@@ -52,6 +55,7 @@ pub enum ViewId {
     BookSingle,
     BookIssueStart,
     BookIssueEnd,
+    Export,
     Exit,
 }
 
@@ -65,8 +69,10 @@ pub enum Message {
     Previous,
     Up,
     Down,
+    CopyValue,
     RequestDayChange,
     ReadClipboard,
+    WriteClipboard(Arc<String>),
     ChangeView(ViewId),
     RefreshView,
     ChangeDay(Day),
@@ -85,6 +91,7 @@ pub enum Message {
         id: usize,
         input: String,
     },
+    Export(DayExportMessage),
     Fds(FastDayStartMessage),
     Fde(FastDayEndMessage),
     Bs(BookSingleMessage),
@@ -196,19 +203,34 @@ impl iced_winit::Program for Quarble {
                         };
                     }
                 }
+                Message::CopyValue => match self.current_view.view_id() {
+                    ViewId::Export => {
+                        message = Some(Message::Export(DayExportMessage::TriggerExport));
+                    }
+                    ViewId::CurrentDayUi => {
+                        self.current_view = CurrentView::create(
+                            ViewId::Export,
+                            self.settings.clone(),
+                            self.active_day.as_ref(),
+                        );
+                        message = Some(Message::Export(DayExportMessage::TriggerExport));
+                    }
+                    _ => (),
+                },
                 Message::ReadClipboard => {
-                    eprintln!("Reading clipboard");
                     let clipboard = iced_native::command::Action::Clipboard(
-                        clipboard::Action::Read(Box::new(move |v| {
-                            eprintln!("got clipboard: '{:?}'", v);
-                            Message::ClipboardValue(v)
-                        })),
+                        clipboard::Action::Read(Box::new(move |v| Message::ClipboardValue(v))),
+                    );
+                    return Command::single(clipboard);
+                }
+                Message::WriteClipboard(value) => {
+                    let clipboard = iced_native::command::Action::Clipboard(
+                        clipboard::Action::Write(value.to_string()),
                     );
                     return Command::single(clipboard);
                 }
                 m => match &mut self.current_view {
                     CurrentView::Book(b) => {
-                        eprintln!("Sending {:?} to book", &m);
                         message = b.update(m);
                     }
                     CurrentView::Fds(fds) => {
@@ -229,6 +251,9 @@ impl iced_winit::Program for Quarble {
                     CurrentView::CdUi(cd) => {
                         message = cd.update(m);
                     }
+                    CurrentView::Export(ex) => {
+                        message = ex.update(m);
+                    }
                     _ => {}
                 },
             }
@@ -247,6 +272,7 @@ impl iced_winit::Program for Quarble {
             CurrentView::Exit(exit) => exit.view(&settings),
             CurrentView::Is(is) => is.view(&settings),
             CurrentView::Ie(ie) => ie.view(&settings),
+            CurrentView::Export(ex) => ex.view(&settings),
         };
         let element: QElement = Container::new(content)
             .padding(Padding::new(style::WINDOW_PADDING))
@@ -350,6 +376,8 @@ fn handle_control_shortcuts(key_code: KeyCode) -> Option<Message> {
         KeyCode::L => Some(Message::ChangeView(ViewId::FastDayEnd)),
         KeyCode::S => Some(Message::ChangeView(ViewId::BookIssueStart)),
         KeyCode::E => Some(Message::ChangeView(ViewId::BookIssueEnd)),
+        KeyCode::X => Some(Message::ChangeView(ViewId::Export)),
+        KeyCode::C => Some(Message::CopyValue),
         KeyCode::Key1 => Some(Message::ChangeView(ViewId::CurrentDayUi)),
         KeyCode::Key2 => Some(Message::ChangeView(ViewId::Book)),
         _ => None,
@@ -372,6 +400,7 @@ fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Messa
                     KeyCode::L => Some(Message::ChangeView(ViewId::FastDayEnd)),
                     KeyCode::S => Some(Message::ChangeView(ViewId::BookIssueStart)),
                     KeyCode::E => Some(Message::ChangeView(ViewId::BookIssueEnd)),
+                    KeyCode::X => Some(Message::ChangeView(ViewId::Export)),
                     KeyCode::Key1 => Some(Message::ChangeView(ViewId::CurrentDayUi)),
                     KeyCode::Key2 => Some(Message::ChangeView(ViewId::Book)),
                     _ => None,
@@ -399,6 +428,7 @@ enum CurrentView {
     Bs(Box<BookSingleUI>),
     Is(Box<IssueStartEdit>),
     Ie(Box<IssueEndEdit>),
+    Export(Box<DayExportUi>),
     Exit(Exit),
 }
 
@@ -412,6 +442,7 @@ impl CurrentView {
             CurrentView::Bs(_) => ViewId::BookSingle,
             CurrentView::Is(_) => ViewId::BookIssueStart,
             CurrentView::Ie(_) => ViewId::BookIssueEnd,
+            CurrentView::Export(_) => ViewId::Export,
             CurrentView::Exit(_) => ViewId::Exit,
         }
     }
@@ -439,6 +470,9 @@ impl CurrentView {
             )),
             ViewId::CurrentDayUi => {
                 CurrentView::CdUi(CurrentDayUI::for_active_day(settings, active_day))
+            }
+            ViewId::Export => {
+                CurrentView::Export(DayExportUi::for_active_day(settings, active_day))
             }
             ViewId::Exit => CurrentView::Exit(Exit),
         }

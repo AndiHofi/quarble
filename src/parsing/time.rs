@@ -263,7 +263,7 @@ impl From<&chrono::NaiveTime> for Time {
 
 impl Display for Time {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{:02}", self.h(), self.m())
+        write!(f, "{:02}:{:02}", self.h(), self.m())
     }
 }
 
@@ -348,6 +348,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::eq_op)]
     fn test_ord() {
         let t8 = Time::hm(8, 45);
         let t9 = Time::hm(9, 15);

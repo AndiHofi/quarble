@@ -9,10 +9,14 @@ pub use work::{Work, WorkEnd, WorkEvent, WorkStart};
 mod action;
 mod day;
 mod day_normalizer;
+mod exporter;
 mod jira_issue;
 mod location;
 mod work;
 mod work_day;
+
+pub use day_normalizer::{BreaksInfo, NormalizedDay, Normalizer};
+pub use exporter::TimeCockpitExporter;
 
 #[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ActiveDay {

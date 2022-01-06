@@ -38,70 +38,6 @@ impl CurrentDayUI {
             settings,
         })
     }
-
-    fn action_row<'a>(&'a self, action: &Action) -> QElement<'static> {
-        let w = Length::Units(40);
-        let s = Length::Units(40);
-        let time = |t: Time| {
-            Text::new(t.to_string())
-                .width(w)
-                .horizontal_alignment(Horizontal::Right)
-                .into()
-        };
-        let dash = |sep: &str| {
-            Text::new(sep)
-                .width(s)
-                .horizontal_alignment(Horizontal::Center)
-                .into()
-        };
-
-        let mut row = Vec::new();
-        match (action.start(), action.end()) {
-            (Some(start), Some(end)) => {
-                row.push(time(start));
-                row.push(dash("-"));
-                row.push(time(end));
-            }
-            (Some(start), None) => {
-                row.push(time(start));
-                row.push(dash("-"));
-                row.push(h_space(w));
-            }
-            (None, Some(end)) => {
-                row.push(h_space(w));
-                row.push(dash("-"));
-                row.push(time(end));
-            }
-            (None, None) => row.push(
-                Text::new("all day")
-                    .horizontal_alignment(Horizontal::Center)
-                    .width(Length::Units(140))
-                    .into(),
-            ),
-        }
-
-        row.push(dash(" | "));
-
-        if let Some(id) = action.issue_id() {
-            row.push(
-                Text::new(id)
-                    .width(Length::Units(80))
-                    .horizontal_alignment(Horizontal::Left)
-                    .into(),
-            );
-            row.push(dash(":"));
-        } else {
-            row.push(h_space(Length::Units(120)));
-        }
-
-        row.push(
-            Text::new(action.as_no_time().to_string())
-                .width(Length::Fill)
-                .into(),
-        );
-
-        Row::with_children(row).into()
-    }
 }
 
 impl MainView for CurrentDayUI {
@@ -113,13 +49,8 @@ impl MainView for CurrentDayUI {
             .map(|i| i.to_string())
             .unwrap_or_else(|| "No active issue".to_string());
 
-        let entries: Vec<QElement<'static>> = self
-            .data
-            .actions()
-            .iter()
-            .map(|e| self.action_row(e))
-            .collect();
-        let mut entries_scroll = Scrollable::new(&mut self.scroll_state);
+        let entries: Vec<QElement<'static>> = self.data.actions().iter().map(action_row).collect();
+        let mut entries_scroll = Scrollable::new(&mut self.scroll_state).width(Length::Fill);
         for e in entries {
             entries_scroll = entries_scroll.push(e);
         }
@@ -198,4 +129,64 @@ impl MainView for CurrentDayUI {
             _ => None,
         }
     }
+}
+
+pub fn action_row(action: &Action) -> QElement<'static> {
+    let w = Length::Units(50);
+    let s = Length::Units(35);
+    let time = |t: Time| {
+        Text::new(t.to_string())
+            .width(w)
+            .horizontal_alignment(Horizontal::Right)
+            .into()
+    };
+    let dash = |sep: &str| {
+        Text::new(sep)
+            .width(s)
+            .horizontal_alignment(Horizontal::Center)
+            .into()
+    };
+
+    let mut row = Vec::new();
+    match (action.start(), action.end()) {
+        (Some(start), Some(end)) => {
+            row.push(time(start));
+            row.push(dash("-"));
+            row.push(time(end));
+        }
+        (Some(start), None) => {
+            row.push(time(start));
+            row.push(dash("-"));
+            row.push(h_space(w));
+        }
+        (None, Some(end)) => {
+            row.push(h_space(w));
+            row.push(dash("-"));
+            row.push(time(end));
+        }
+        (None, None) => row.push(
+            Text::new("all day")
+                .horizontal_alignment(Horizontal::Center)
+                .width(Length::Units(140))
+                .into(),
+        ),
+    }
+
+    row.push(dash(" | "));
+
+    if let Some(id) = action.issue_id() {
+        row.push(
+            Text::new(id)
+                .width(Length::Units(80))
+                .horizontal_alignment(Horizontal::Left)
+                .into(),
+        );
+        row.push(dash(":"));
+    } else {
+        row.push(h_space(Length::Units(120)));
+    }
+
+    row.push(Text::new(action.as_no_time().to_string()).into());
+
+    Row::with_children(row).into()
 }
