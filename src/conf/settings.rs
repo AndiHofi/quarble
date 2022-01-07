@@ -57,7 +57,7 @@ impl Default for Settings {
     }
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct SettingsSer {
     pub db_dir: PathBuf,
     #[serde(default)]
@@ -79,9 +79,66 @@ impl SettingsSer {
     }
 }
 
-#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct BreaksConfig {
     pub min_breaks_minutes: u32,
     pub min_work_time_minutes: u32,
     pub default_break: (Time, Time),
+}
+
+#[cfg(test)]
+mod test {
+    use crate::conf::{BreaksConfig, SettingsSer};
+    use crate::data::JiraIssue;
+    use crate::parsing::time::Time;
+    use std::collections::BTreeMap;
+    use std::path::{Path, PathBuf};
+    use std::str::FromStr;
+
+    #[test]
+    fn test_serialize_settings() {
+        let orig = SettingsSer {
+            db_dir: Path::new("db/dir").to_owned(),
+            resolution_minutes: 15,
+            issue_shortcuts: BTreeMap::from_iter(
+                vec![
+                    (
+                        'a',
+                        JiraIssue {
+                            ident: "A-8".to_string(),
+                            description: Some("Agile meeting".to_string()),
+                            default_action: Some("meeting".to_string()),
+                        },
+                    ),
+                    (
+                        'b',
+                        JiraIssue {
+                            ident: "A-5".to_string(),
+                            description: Some("Project related meeting".to_string()),
+                            default_action: None,
+                        },
+                    ),
+                    (
+                        'm',
+                        JiraIssue {
+                            ident: "A-2".to_string(),
+                            description: Some("Management".to_string()),
+                            default_action: None,
+                        },
+                    ),
+                ]
+                .into_iter(),
+            ),
+            breaks: BreaksConfig {
+                min_breaks_minutes: 45,
+                min_work_time_minutes: 360,
+                default_break: (Time::hm(11, 30), Time::hm(12, 15)),
+            },
+        };
+
+        let pretty = serde_json::to_string_pretty(&orig).unwrap();
+
+        let parsed = serde_json::from_str(&pretty).unwrap();
+        assert_eq!(orig, parsed);
+    }
 }
