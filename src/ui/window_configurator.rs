@@ -43,22 +43,17 @@ impl<'a, A> iced_winit::window_configurator::WindowConfigurator<A> for MyWindowC
         let is_wayland = is_wayland(window_target);
 
         let size: LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());
+        let window_size = LogicalSize::new((size.width / 2.0).max(800.0).min(2000.0), 300.0);
         if is_wayland {
             window_builder
                 .with_resizable(true)
-                .with_inner_size(LogicalSize::new(
-                    (size.width / 2.0).max(1024.0),
-                    (size.height / 3.0).max(300.0),
-                ))
+                .with_inner_size(window_size)
                 .with_decorations(true)
         } else {
             window_builder
                 .with_resizable(true)
                 .with_decorations(false)
-                .with_inner_size(LogicalSize::new(
-                    (size.width / 2.0).max(800.0).min(2000.0),
-                    200.0,
-                ))
+                .with_inner_size(window_size)
                 .with_position(monitor.position())
         }
     }

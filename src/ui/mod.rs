@@ -5,6 +5,7 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use iced_core::keyboard::{KeyCode, Modifiers};
 use iced_core::{Color, Padding};
+use iced_native::clipboard;
 use iced_wgpu::Text;
 use iced_winit::settings::SettingsWindowConfigurator;
 use iced_winit::widget::Container;
@@ -12,7 +13,7 @@ use iced_winit::{event, Command, Subscription};
 use iced_winit::{Element, Mode};
 use iced_winit::{Event, Program};
 
-use crate::conf::{MainAction, Settings};
+use crate::conf::{update_settings, SettingsRef};
 use crate::data::{Action, ActiveDay, Day, TimedAction};
 use crate::db::DB;
 use crate::parsing::parse_result::ParseResult;
@@ -26,8 +27,9 @@ use crate::ui::fast_day_end::{FastDayEnd, FastDayEndMessage};
 use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
 use crate::ui::issue_end_edit::{IssueEndEdit, IssueEndMessage};
 use crate::ui::issue_start_edit::{IssueStartEdit, IssueStartMessage};
+use crate::ui::main_action::MainAction;
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
-use iced_native::clipboard;
+use crate::Settings;
 
 mod book;
 mod book_single;
@@ -41,12 +43,60 @@ mod issue_end_edit;
 mod issue_start_edit;
 pub mod main_action;
 mod style;
+mod top_bar;
 mod util;
 mod window_configurator;
 mod work_entry_edit;
 mod work_start_edit;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum StayActive {
+    Default,
+    Yes,
+    No,
+}
+impl Default for StayActive {
+    fn default() -> Self {
+        StayActive::Default
+    }
+}
+
+impl StayActive {
+    pub fn close_app(self, settings: &Settings) -> bool {
+        match self {
+            StayActive::Default => settings.close_on_safe,
+            StayActive::No => true,
+            StayActive::Yes => false,
+        }
+    }
+
+    pub fn apply_settings(self, settings: &Settings) -> Self {
+        match self {
+            StayActive::Default => {
+                if settings.close_on_safe {
+                    StayActive::No
+                } else {
+                    StayActive::Yes
+                }
+            }
+            v => v,
+        }
+    }
+
+    pub fn do_close(self) -> bool {
+        matches!(self, StayActive::No)
+    }
+
+    pub fn on_main_view_store(self) -> Option<Message> {
+        Some(if self.do_close() {
+            Message::Exit
+        } else {
+            Message::Reset
+        })
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ViewId {
     Book,
     CurrentDayUi,
@@ -75,8 +125,11 @@ pub enum Message {
     WriteClipboard(Arc<String>),
     ChangeView(ViewId),
     RefreshView,
+    Reset,
+    SubmitCurrent(StayActive),
     ChangeDay(Day),
     ClipboardValue(Option<String>),
+    UpdateCloseOnSafe(bool),
     UpdateStart {
         id: usize,
         input: String,
@@ -98,8 +151,13 @@ pub enum Message {
     Is(IssueStartMessage),
     Ie(IssueEndMessage),
     Cd(CurrentDayMessage),
-    StoreAction(Action),
-    StoreSuccess,
+    StoreAction(StayActive, Action),
+    ModifyAction {
+        stay_active: StayActive,
+        orig: Box<Action>,
+        update: Box<Action>,
+    },
+    StoreSuccess(StayActive),
     Error(String),
 }
 
@@ -134,14 +192,13 @@ pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     config_settings
 }
 
-pub type SettingsRef = Rc<ArcSwap<Settings>>;
-
 pub struct Quarble {
     current_view: CurrentView,
     settings: SettingsRef,
     db: DB,
     active_day: Option<ActiveDay>,
     active_day_dirty: bool,
+    initial_view: ViewId,
 }
 
 impl iced_winit::Program for Quarble {
@@ -156,6 +213,9 @@ impl iced_winit::Program for Quarble {
                 Message::Exit => {
                     self.current_view = CurrentView::Exit(Exit);
                 }
+                Message::UpdateCloseOnSafe(new_value) => update_settings(&self.settings, |s| {
+                    s.close_on_safe = new_value;
+                }),
                 Message::RequestDayChange => {
                     if let CurrentView::CdUi(ui) = &mut self.current_view {
                         message = ui.update(Message::Cd(CurrentDayMessage::StartDayChange))
@@ -194,13 +254,37 @@ impl iced_winit::Program for Quarble {
                         self.active_day.as_ref(),
                     );
                 }
-                Message::StoreAction(action) => {
+                Message::Reset => {
+                    message = Some(Message::ChangeView(self.initial_view));
+                }
+                Message::StoreAction(stay_active, action) => {
                     if let Some(ref mut active_day) = self.active_day {
                         active_day.add_action(action);
                         message = match self.db.store_day(active_day.get_day(), active_day) {
-                            Ok(()) => Some(Message::StoreSuccess),
+                            Ok(()) => Some(Message::StoreSuccess(
+                                stay_active.apply_settings(&self.settings.load()),
+                            )),
                             Err(e) => Some(Message::Error(format!("{:?}", e))),
                         };
+                    }
+                }
+                Message::ModifyAction {
+                    stay_active,
+                    orig,
+                    update,
+                } => {
+                    if let Some(ref mut active_day) = self.active_day {
+                        let actions = active_day.actions_mut();
+                        if actions.remove(&orig) {
+                            actions.insert(*update);
+                            message = Some(Message::StoreSuccess(
+                                stay_active.apply_settings(&self.settings.load()),
+                            ));
+                        } else {
+                            message = Some(Message::Error(
+                                "Could not update action. Did not find original".to_string(),
+                            ));
+                        }
                     }
                 }
                 Message::CopyValue => match self.current_view.view_id() {
@@ -219,7 +303,7 @@ impl iced_winit::Program for Quarble {
                 },
                 Message::ReadClipboard => {
                     let clipboard = iced_native::command::Action::Clipboard(
-                        clipboard::Action::Read(Box::new(move |v| Message::ClipboardValue(v))),
+                        clipboard::Action::Read(Box::new(Message::ClipboardValue)),
                     );
                     return Command::single(clipboard);
                 }
@@ -300,7 +384,7 @@ impl iced_winit::Application for Quarble {
         };
 
         let current_view =
-            CurrentView::create(flags.initial_action, settings.clone(), active_day.as_ref());
+            CurrentView::create(flags.initial_view, settings.clone(), active_day.as_ref());
 
         let mut quarble = Quarble {
             current_view,
@@ -308,6 +392,7 @@ impl iced_winit::Application for Quarble {
             db,
             active_day,
             active_day_dirty: false,
+            initial_view: flags.initial_view,
         };
 
         let command = if let Some(initial_message) = initial_message {
@@ -355,6 +440,9 @@ fn handle_control_keyboard_event(key_event: iced_winit::keyboard::Event) -> Opti
         } => {
             if modifiers.is_empty() {
                 match key_code {
+                    KeyCode::Enter | KeyCode::NumpadEnter => {
+                        Some(Message::SubmitCurrent(StayActive::Default))
+                    }
                     KeyCode::Escape => Some(Message::Exit),
                     _ => None,
                 }
@@ -380,6 +468,7 @@ fn handle_control_shortcuts(key_code: KeyCode) -> Option<Message> {
         KeyCode::C => Some(Message::CopyValue),
         KeyCode::Key1 => Some(Message::ChangeView(ViewId::CurrentDayUi)),
         KeyCode::Key2 => Some(Message::ChangeView(ViewId::Book)),
+        KeyCode::Enter | KeyCode::NumpadEnter => Some(Message::SubmitCurrent(StayActive::Yes)),
         _ => None,
     }
 }
@@ -403,6 +492,9 @@ fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Messa
                     KeyCode::X => Some(Message::ChangeView(ViewId::Export)),
                     KeyCode::Key1 => Some(Message::ChangeView(ViewId::CurrentDayUi)),
                     KeyCode::Key2 => Some(Message::ChangeView(ViewId::Book)),
+                    KeyCode::Enter | KeyCode::NumpadEnter => {
+                        Some(Message::SubmitCurrent(StayActive::Default))
+                    }
                     _ => None,
                 }
             } else if modifiers.shift() {
@@ -411,7 +503,12 @@ fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Messa
                     _ => None,
                 }
             } else if modifiers.control() {
-                handle_control_shortcuts(key_code)
+                match key_code {
+                    KeyCode::Enter | KeyCode::NumpadEnter => {
+                        Some(Message::SubmitCurrent(StayActive::Yes))
+                    }
+                    key_code => handle_control_shortcuts(key_code),
+                }
             } else {
                 None
             }
@@ -453,21 +550,18 @@ impl CurrentView {
         match id {
             ViewId::Book => CurrentView::Book(Book::new(&guard)),
             ViewId::FastDayStart => {
-                CurrentView::Fds(FastDayStart::for_work_day(&guard, active_day))
+                CurrentView::Fds(FastDayStart::for_work_day(settings, active_day))
             }
-            ViewId::FastDayEnd => CurrentView::Fde(FastDayEnd::for_work_day(&guard, active_day)),
-            ViewId::BookSingle => CurrentView::Bs(BookSingleUI::for_active_day(
-                settings.load_full(),
-                active_day,
-            )),
-            ViewId::BookIssueStart => CurrentView::Is(IssueStartEdit::for_active_day(
-                settings.load_full(),
-                active_day,
-            )),
-            ViewId::BookIssueEnd => CurrentView::Ie(IssueEndEdit::for_active_day(
-                settings.load_full(),
-                active_day,
-            )),
+            ViewId::FastDayEnd => CurrentView::Fde(FastDayEnd::for_work_day(settings, active_day)),
+            ViewId::BookSingle => {
+                CurrentView::Bs(BookSingleUI::for_active_day(settings, active_day))
+            }
+            ViewId::BookIssueStart => {
+                CurrentView::Is(IssueStartEdit::for_active_day(settings, active_day))
+            }
+            ViewId::BookIssueEnd => {
+                CurrentView::Ie(IssueEndEdit::for_active_day(settings, active_day))
+            }
             ViewId::CurrentDayUi => {
                 CurrentView::CdUi(CurrentDayUI::for_active_day(settings, active_day))
             }
@@ -505,6 +599,27 @@ fn input_message(s: &str, actions: &BTreeSet<Action>) -> String {
         (Some(start), None) | (None, Some(start)) => format!("{}: First action on {}", s, start),
         (Some(start), Some(end)) => format!("{}: Already booked from {} to {}", s, start, end),
     }
+}
+
+fn day_info_message(d: Option<&ActiveDay>) -> String {
+    if let Some(d) = d {
+        match min_max_booked(d.actions()) {
+            (None, None) => format!("{} - nothing booked", d.get_day()),
+            (Some(start), None) | (None, Some(start)) => {
+                format!("{}: first action on {}", d.get_day(), start)
+            }
+            (Some(start), Some(end)) => {
+                format!("{}: booked from {} to {}", d.get_day(), start, end)
+            }
+        }
+    } else {
+        "No day selected".to_string()
+    }
+}
+
+fn unbooked_time(d: Option<&ActiveDay>) -> Vec<TimeLimit> {
+    d.map(|d| unbooked_time_for_day(d.actions()))
+        .unwrap_or_default()
 }
 
 fn min_max_booked(actions: &BTreeSet<Action>) -> (Option<Time>, Option<Time>) {

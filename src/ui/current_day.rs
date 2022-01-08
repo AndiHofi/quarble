@@ -1,8 +1,8 @@
-use crate::conf::Settings;
+use crate::conf::{Settings, SettingsRef};
 use crate::data::{Action, ActiveDay, Day};
 use crate::parsing::time::Time;
 use crate::ui::util::h_space;
-use crate::ui::{style, text, SettingsRef};
+use crate::ui::{style, text};
 use crate::ui::{MainView, Message, QElement};
 use iced_core::alignment::Horizontal;
 use iced_core::Length;
@@ -177,7 +177,7 @@ pub fn action_row(action: &Action) -> QElement<'static> {
     if let Some(id) = action.issue_id() {
         row.push(
             Text::new(id)
-                .width(Length::Units(80))
+                .width(Length::Units(120))
                 .horizontal_alignment(Horizontal::Left)
                 .into(),
         );

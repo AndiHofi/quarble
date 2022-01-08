@@ -1,12 +1,13 @@
 use iced_wgpu::TextInput;
 use iced_winit::widget::{text_input, Column, Row, Space, Text};
 
-use crate::conf::Settings;
+use crate::conf::{Settings, SettingsRef};
 use crate::data::{Action, ActiveDay, DayStart, Location, TimedAction};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeLimit, TimeResult};
-use crate::ui::{input_message, style, unbooked_time_for_day, MainView, Message, QElement};
+use crate::ui::top_bar::TopBar;
+use crate::ui::{day_info_message, style, unbooked_time, MainView, Message, QElement, StayActive};
 use crate::util::Timeline;
 
 #[derive(Clone, Debug)]
@@ -15,35 +16,32 @@ pub enum FastDayStartMessage {
 }
 
 pub(super) struct FastDayStart {
+    top_bar: TopBar,
     text: String,
     text_state: text_input::State,
     value: Option<DayStart>,
-    message: String,
     limits: Vec<TimeLimit>,
     builder: DayStartBuilder,
     timeline: Timeline,
 }
 
 impl FastDayStart {
-    pub fn for_work_day(settings: &Settings, work_day: Option<&ActiveDay>) -> Box<Self> {
-        let (message, limits) = if let Some(work_day) = work_day {
-            let actions = work_day.actions();
-            (
-                input_message("Start working day", actions),
-                unbooked_time_for_day(actions),
-            )
-        } else {
-            ("Start working day".to_string(), Vec::default())
-        };
-        let timeline = settings.timeline.clone();
+    pub fn for_work_day(settings: SettingsRef, work_day: Option<&ActiveDay>) -> Box<Self> {
+        let timeline = settings.load().timeline.clone();
+        let limits = unbooked_time(work_day);
         Box::new(FastDayStart {
+            top_bar: TopBar {
+                title: "Start day",
+                help_text: "[h|o] [+|-]hours or minute",
+                info: day_info_message(work_day),
+                settings,
+            },
             text: String::new(),
             text_state: text_input::State::focused(),
             value: Some(DayStart {
                 location: Location::Office,
                 ts: timeline.time_now(),
             }),
-            message,
             limits,
             builder: DayStartBuilder {
                 ts: TimeResult::Valid(timeline.time_now()),
@@ -167,15 +165,9 @@ impl MainView for FastDayStart {
             ParseResult::None => "now".to_string(),
         };
 
-        let header_row = Text::new(format!(
-            "Day start: [h|o] [+|-]hours or minute: {}",
-            &self.message
-        ));
-
         let input_widget = TextInput::new(&mut self.text_state, "now", &self.text, move |input| {
             on_input_change(input)
-        })
-        .on_submit(on_submit_message(self.value.as_ref()));
+        });
 
         let status_row = Row::with_children(vec![
             Text::new(loc_str).into(),
@@ -184,7 +176,7 @@ impl MainView for FastDayStart {
         ]);
 
         Column::with_children(vec![
-            header_row.into(),
+            self.top_bar.view(),
             Space::with_height(style::SPACE).into(),
             input_widget.into(),
             Space::with_height(style::SPACE).into(),
@@ -198,7 +190,8 @@ impl MainView for FastDayStart {
             Message::Fds(msg) => match msg {
                 FastDayStartMessage::TextChanged(new_value) => self.update_text(new_value),
             },
-            Message::StoreSuccess => Some(Message::Exit),
+            Message::SubmitCurrent(stay_active) => on_submit(stay_active, self.value.as_ref()),
+            Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
             _ => None,
         }
     }
@@ -208,16 +201,13 @@ fn on_input_change(text: String) -> Message {
     Message::Fds(FastDayStartMessage::TextChanged(text))
 }
 
-fn on_submit_message(value: Option<&DayStart>) -> Message {
-    if let Some(v) = value {
-        Message::StoreAction(Action::DayStart(v.clone()))
-    } else {
-        Message::Update
-    }
+fn on_submit(stay_active: StayActive, value: Option<&DayStart>) -> Option<Message> {
+    value.map(|v| Message::StoreAction(stay_active, Action::DayStart(v.clone())))
 }
 
 #[cfg(test)]
 mod test {
+    use crate::conf::into_settings_ref;
     use crate::ui::fast_day_start::FastDayStart;
     use crate::util::StaticTimeline;
     use crate::Settings;
@@ -231,15 +221,15 @@ mod test {
 
     fn p(i: &[&str]) {
         let timeline = StaticTimeline::parse("2021-12-29 10:00");
-        let settings = Settings::default().with_timeline(timeline);
+        let settings = into_settings_ref(Settings::default().with_timeline(timeline));
         for input in i {
-            let mut fds = FastDayStart::for_work_day(&settings, None);
+            let mut fds = FastDayStart::for_work_day(settings.clone(), None);
             fds.builder.parse_value(&fds.timeline, &fds.limits, *input);
 
             eprintln!(
                 "'{}' -> {:?}",
                 input,
-                fds.builder.try_build(&settings.timeline)
+                fds.builder.try_build(&settings.load().timeline)
             );
         }
     }

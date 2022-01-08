@@ -1,14 +1,17 @@
+use crate::conf::SettingsRef;
 use crate::data::{Action, ActiveDay, JiraIssue, WorkStart};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::{parse_issue_clipboard, IssueParsed};
 use crate::ui::clip_read::ClipRead;
+use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{input_message, style, text, time_info, MainView, Message, QElement};
+use crate::ui::{
+    day_info_message, style, text, time_info, MainView, Message, QElement, StayActive,
+};
 use crate::Settings;
 use iced_native::widget::{text_input, Column, Row};
 use iced_wgpu::TextInput;
-use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub enum IssueStartMessage {
@@ -17,27 +20,27 @@ pub enum IssueStartMessage {
 
 #[derive(Debug)]
 pub struct IssueStartEdit {
+    top_bar: TopBar,
     input_state: text_input::State,
     input: String,
-    message: String,
     builder: IssueStartBuilder,
-    settings: Arc<Settings>,
+    settings: SettingsRef,
 }
 
 impl IssueStartEdit {
     pub fn for_active_day(
-        settings: Arc<Settings>,
+        settings: SettingsRef,
         active_day: Option<&ActiveDay>,
     ) -> Box<IssueStartEdit> {
         Box::new(Self {
+            top_bar: TopBar {
+                title: "Start issue:",
+                help_text: "[time] [issue] <comment>",
+                info: day_info_message(active_day),
+                settings: settings.clone(),
+            },
             input_state: text_input::State::focused(),
             input: String::new(),
-            message: input_message(
-                "Start issue: ",
-                active_day
-                    .map(|d| d.actions())
-                    .unwrap_or(ActiveDay::no_action()),
-            ),
             builder: IssueStartBuilder::default(),
             settings,
         })
@@ -51,20 +54,19 @@ impl IssueStartEdit {
             None
         }
     }
+
+    fn on_submit(&mut self, stay_active: StayActive) -> Option<Message> {
+        self.builder
+            .try_build()
+            .map(|w| Message::StoreAction(stay_active, Action::WorkStart(w)))
+    }
 }
 
 impl MainView for IssueStartEdit {
     fn view(&mut self, _settings: &Settings) -> QElement {
-        let on_submit = self
-            .builder
-            .try_build()
-            .map(|w| Message::StoreAction(Action::WorkStart(w)))
-            .unwrap_or(Message::Update);
-
         let input = TextInput::new(&mut self.input_state, "", &self.input, |i| {
             Message::Is(IssueStartMessage::TextChanged(i))
-        })
-        .on_submit(on_submit);
+        });
 
         let info = Row::with_children(vec![
             text("Time:"),
@@ -86,7 +88,7 @@ impl MainView for IssueStartEdit {
             text(self.builder.comment.as_deref().unwrap_or("<none>")),
         ]);
         Column::with_children(vec![
-            text(&self.message),
+            self.top_bar.view(),
             v_space(style::SPACE),
             input.into(),
             v_space(style::SPACE),
@@ -98,7 +100,7 @@ impl MainView for IssueStartEdit {
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Is(IssueStartMessage::TextChanged(input)) => {
-                self.builder.parse_input(&self.settings, &input);
+                self.builder.parse_input(&self.settings.load(), &input);
                 self.input = input;
                 self.follow_up()
             }
@@ -106,7 +108,8 @@ impl MainView for IssueStartEdit {
                 self.builder.apply_clipboard(value);
                 None
             }
-            Message::StoreSuccess => Some(Message::Exit),
+            Message::SubmitCurrent(stay_active) => self.on_submit(stay_active),
+            Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
             _ => None,
         }
     }

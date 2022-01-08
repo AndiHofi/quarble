@@ -1,13 +1,17 @@
-use iced_wgpu::TextInput;
-use iced_winit::widget::{text_input, Column, Row, Space, Text};
 use std::collections::BTreeSet;
 
-use crate::conf::Settings;
+use iced_wgpu::TextInput;
+use iced_winit::widget::{text_input, Column, Row, Text};
+
+use crate::conf::{Settings, SettingsRef};
 use crate::data::{Action, ActiveDay, DayEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeLimit, TimeResult};
-use crate::ui::{min_max_booked, style, unbooked_time_for_day, MainView, Message, QElement};
-use crate::util::Timeline;
+use crate::ui::top_bar::TopBar;
+use crate::ui::util::v_space;
+use crate::ui::{
+    day_info_message, min_max_booked, style, unbooked_time, MainView, Message, QElement, StayActive,
+};
 
 #[derive(Clone, Debug)]
 pub enum FastDayEndMessage {
@@ -15,39 +19,47 @@ pub enum FastDayEndMessage {
 }
 
 pub(super) struct FastDayEnd {
+    top_bar: TopBar,
     text: String,
     text_state: text_input::State,
     value: Option<DayEnd>,
-    message: String,
     limits: Vec<TimeLimit>,
     builder: DayEndBuilder,
     bad_input: bool,
-    timeline: Timeline,
+    original_entry: Option<DayEnd>,
+    settings: SettingsRef,
 }
 
 impl FastDayEnd {
-    pub fn for_work_day(settings: &Settings, work_day: Option<&ActiveDay>) -> Box<Self> {
-        let (message, limits) = if let Some(work_day) = work_day {
-            let actions = work_day.actions();
-            (end_day_message(actions), unbooked_time_for_day(actions))
-        } else {
-            ("Start working day".to_string(), Vec::default())
-        };
-        let timeline = settings.timeline.clone();
+    pub fn for_work_day(settings: SettingsRef, work_day: Option<&ActiveDay>) -> Box<Self> {
+        let limits = unbooked_time(work_day);
+        let timeline = &settings.load().timeline;
         Box::new(Self {
+            top_bar: TopBar {
+                title: "Day end:",
+                help_text: "[+|-]hours or minute",
+                info: day_info_message(work_day),
+                settings: settings.clone(),
+            },
             text: String::new(),
             text_state: text_input::State::focused(),
             value: Some(DayEnd {
                 ts: timeline.time_now(),
             }),
-            message,
             limits,
             builder: DayEndBuilder {
                 ts: ParseResult::Valid(timeline.time_now()),
             },
             bad_input: false,
-            timeline,
+            original_entry: None,
+            settings,
         })
+    }
+
+    pub fn entry_to_edit(&mut self, to_edit: DayEnd) -> Option<Message> {
+        self.update_text(format!("{}", to_edit.ts));
+        self.original_entry = Some(to_edit);
+        None
     }
 
     fn update_text(&mut self, new_value: String) -> Option<Message> {
@@ -60,7 +72,7 @@ impl FastDayEnd {
     fn parse_value(&mut self, text: &str) {
         self.bad_input = false;
 
-        let result = crate::parsing::parse_day_end(self.timeline.time_now(), text);
+        let result = crate::parsing::parse_day_end(self.settings.load().timeline.time_now(), text);
 
         let result = result
             .map_invalid(|_| InvalidTime::Bad)
@@ -87,14 +99,13 @@ impl MainView for FastDayEnd {
             .unwrap_or_default();
 
         Column::with_children(vec![
-            Text::new(format!("Day end: [+|-]hours or minute: {}", &self.message)).into(),
-            Space::with_width(style::SPACE).into(),
+            self.top_bar.view(),
+            v_space(style::SPACE),
             TextInput::new(&mut self.text_state, "now", &self.text, move |input| {
-                on_input_change(input)
+                on_input_change_message(input)
             })
-            .on_submit(on_submit_message(self.value.as_ref()))
             .into(),
-            Space::with_width(style::SPACE).into(),
+            v_space(style::SPACE),
             Row::with_children(vec![Text::new(time_str).into()]).into(),
         ])
         .into()
@@ -105,21 +116,36 @@ impl MainView for FastDayEnd {
             Message::Fde(msg) => match msg {
                 FastDayEndMessage::TextChanged(new_value) => self.update_text(new_value),
             },
-            Message::StoreSuccess => Some(Message::Exit),
+            Message::SubmitCurrent(stay_active) => {
+                on_submit(stay_active, &mut self.original_entry, self.value.as_ref())
+            }
+            Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
             _ => None,
         }
     }
 }
 
-fn on_input_change(text: String) -> Message {
+fn on_input_change_message(text: String) -> Message {
     Message::Fde(FastDayEndMessage::TextChanged(text))
 }
 
-fn on_submit_message(value: Option<&DayEnd>) -> Message {
+fn on_submit(
+    stay_active: StayActive,
+    orig_value: &mut Option<DayEnd>,
+    value: Option<&DayEnd>,
+) -> Option<Message> {
     if let Some(v) = value {
-        Message::StoreAction(Action::DayEnd(v.clone()))
+        if let Some(orig) = std::mem::take(orig_value) {
+            Some(Message::ModifyAction {
+                stay_active,
+                orig: Box::new(Action::DayEnd(orig)),
+                update: Box::new(Action::DayEnd(v.clone())),
+            })
+        } else {
+            Some(Message::StoreAction(stay_active, Action::DayEnd(v.clone())))
+        }
     } else {
-        Message::Update
+        None
     }
 }
 
@@ -136,10 +162,11 @@ impl DayEndBuilder {
 
 #[cfg(test)]
 mod test {
-    use crate::parsing::time::Time;
-    use crate::ui::fast_day_end::FastDayEnd;
     use chrono::Timelike;
 
+    use crate::conf::into_settings_ref;
+    use crate::parsing::time::Time;
+    use crate::ui::fast_day_end::FastDayEnd;
     use crate::util::{DefaultTimeline, TimelineProvider};
     use crate::Settings;
 
@@ -156,8 +183,8 @@ mod test {
     }
 
     fn p(i: &[&str]) {
-        let settings = Settings::default();
-        let mut fde = FastDayEnd::for_work_day(&settings, None);
+        let settings = into_settings_ref(Settings::default());
+        let mut fde = FastDayEnd::for_work_day(settings, None);
         for input in i {
             fde.parse_value(input);
             eprintln!("'{}' -> {:?}", input, fde.builder);

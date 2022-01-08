@@ -53,7 +53,7 @@ impl WorkBuilder {
         }
     }
 
-    pub(super) fn try_build(&self, now: Time, _settings: &Settings) -> Option<Work> {
+    pub(super) fn try_build(&self, now: Time) -> Option<Work> {
         let start = self.start.get_with_default(now);
 
         let end = self.end.get_with_default(now);

@@ -63,6 +63,10 @@ impl ActiveDay {
         &self.actions
     }
 
+    pub fn actions_mut(&mut self) -> &mut BTreeSet<Action> {
+        &mut self.actions
+    }
+
     pub fn add_action(&mut self, action: Action) {
         self.actions.insert(action);
     }

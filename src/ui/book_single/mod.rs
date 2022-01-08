@@ -1,15 +1,18 @@
-use crate::conf::Settings;
+use iced_native::widget::Row;
+use iced_wgpu::TextInput;
+use iced_winit::widget::{text_input, Column};
+
+use parsing::WorkBuilder;
+
+use crate::conf::{Settings, SettingsRef};
 use crate::data::{ActiveDay, JiraIssue, Work};
 use crate::parsing::parse_result::ParseResult;
 use crate::ui::clip_read::ClipRead;
+use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{input_message, style, text, time_info, MainView, Message, QElement};
-use crate::util::Timeline;
-use iced_native::widget::Row;
-use iced_wgpu::TextInput;
-use iced_winit::widget::{text_input, Column, Text};
-use parsing::WorkBuilder;
-use std::sync::Arc;
+use crate::ui::{
+    day_info_message, style, text, time_info, MainView, Message, QElement, StayActive,
+};
 
 mod parsing;
 
@@ -19,32 +22,31 @@ pub enum BookSingleMessage {
 }
 
 pub struct BookSingleUI {
+    top_bar: TopBar,
     input_state: text_input::State,
     input: String,
     data: Option<Work>,
     builder: WorkBuilder,
-    input_message: String,
-    timeline: Timeline,
-    settings: Arc<Settings>,
+    settings: SettingsRef,
 }
 
 impl BookSingleUI {
     fn parse_input(&mut self, text: &str) {
-        self.builder.parse_input(&self.settings, text)
+        self.builder.parse_input(&self.settings.load(), text)
     }
 
-    pub fn for_active_day(settings: Arc<Settings>, active_day: Option<&ActiveDay>) -> Box<Self> {
-        let actions = active_day
-            .map(|a| a.actions())
-            .unwrap_or(ActiveDay::no_action());
-        let timeline = settings.timeline.clone();
+    pub fn for_active_day(settings: SettingsRef, active_day: Option<&ActiveDay>) -> Box<Self> {
         Box::new(Self {
+            top_bar: TopBar {
+                title: "Book issue:",
+                help_text: "(start [end])|duration <issue id> <message>",
+                info: day_info_message(active_day),
+                settings: settings.clone(),
+            },
             input_state: text_input::State::focused(),
             input: "".to_string(),
             data: None,
             builder: Default::default(),
-            input_message: input_message("Book issue", actions),
-            timeline,
             settings,
         })
     }
@@ -58,25 +60,20 @@ impl BookSingleUI {
         }
     }
 
-    fn on_submit_message(&self, settings: &Settings) -> Message {
+    fn on_submit(&self, sa: StayActive) -> Option<Message> {
         self.builder
-            .try_build(settings.timeline.time_now(), settings)
-            .map(|e| Message::StoreAction(crate::data::Action::Work(e)))
-            .unwrap_or_default()
+            .try_build(self.settings.load().timeline.time_now())
+            .map(|e| Message::StoreAction(sa, crate::data::Action::Work(e)))
     }
 }
 
 impl MainView for BookSingleUI {
-    fn view(&mut self, settings: &Settings) -> QElement {
-        let on_submit = self.on_submit_message(settings);
-
-        let msg = Text::new(&self.input_message);
+    fn view(&mut self, _settings: &Settings) -> QElement {
         let input = TextInput::new(&mut self.input_state, "", &self.input, |s| {
             Message::Bs(BookSingleMessage::TextChanged(s))
-        })
-        .on_submit(on_submit);
+        });
 
-        let now = settings.timeline.time_now();
+        let now = self.settings.load().timeline.time_now();
 
         let status = Row::with_children(vec![
             text("Start:"),
@@ -103,7 +100,7 @@ impl MainView for BookSingleUI {
         ]);
 
         Column::with_children(vec![
-            msg.into(),
+            self.top_bar.view(),
             v_space(style::SPACE),
             input.into(),
             v_space(style::SPACE),
@@ -123,7 +120,8 @@ impl MainView for BookSingleUI {
                 self.builder.apply_clipboard(v);
                 None
             }
-            Message::StoreSuccess => Some(Message::Exit),
+            Message::SubmitCurrent(stay_active) => self.on_submit(stay_active),
+            Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
             _ => self.follow_up_msg(),
         }
     }

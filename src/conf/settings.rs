@@ -2,8 +2,10 @@ use crate::data::{Day, JiraIssue};
 use crate::parsing::time::Time;
 use crate::parsing::IssueParser;
 use crate::util::{DefaultTimeline, Timeline, TimelineProvider};
+use arc_swap::ArcSwap;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -17,6 +19,7 @@ pub struct Settings {
     pub issue_parser: IssueParser,
     pub breaks: BreaksConfig,
     pub debug: bool,
+    pub close_on_safe: bool,
 }
 
 impl Settings {
@@ -40,6 +43,18 @@ impl Settings {
     }
 }
 
+pub type SettingsRef = Rc<ArcSwap<Settings>>;
+
+pub fn into_settings_ref(s: Settings) -> SettingsRef {
+    Rc::new(ArcSwap::new(Arc::new(s)))
+}
+
+pub fn update_settings(settings: &SettingsRef, f: impl FnOnce(&mut Settings)) {
+    let mut updating = (**settings.load()).clone();
+    f(&mut updating);
+    settings.store(Arc::new(updating))
+}
+
 impl Default for Settings {
     fn default() -> Self {
         let timeline = Arc::new(DefaultTimeline);
@@ -53,6 +68,7 @@ impl Default for Settings {
             issue_parser: IssueParser::default(),
             breaks: Default::default(),
             debug: false,
+            close_on_safe: true,
         }
     }
 }
@@ -92,8 +108,7 @@ mod test {
     use crate::data::JiraIssue;
     use crate::parsing::time::Time;
     use std::collections::BTreeMap;
-    use std::path::{Path, PathBuf};
-    use std::str::FromStr;
+    use std::path::Path;
 
     #[test]
     fn test_serialize_settings() {

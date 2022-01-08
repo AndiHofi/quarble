@@ -1,16 +1,16 @@
 #![cfg(test)]
 
+use crate::conf::into_settings_ref;
 use crate::data::{JiraIssue, Work};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::{parse_issue_clipboard, IssueParser};
 use crate::ui::book_single::{BookSingleMessage, BookSingleUI};
 use crate::ui::clip_read::ClipRead;
-use crate::ui::{MainView, Message};
+use crate::ui::{MainView, Message, StayActive};
 use crate::util::StaticTimeline;
 use crate::Settings;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 fn meeting() -> JiraIssue {
     JiraIssue {
@@ -25,7 +25,7 @@ fn make_ui(now: &str) -> Box<BookSingleUI> {
     let tl = StaticTimeline::parse(&date_time);
     let mut settings = Settings::default().with_timeline(tl);
     settings.issue_parser = IssueParser::new(BTreeMap::from_iter([('a', meeting())].into_iter()));
-    BookSingleUI::for_active_day(Arc::new(settings), None)
+    BookSingleUI::for_active_day(into_settings_ref(settings), None)
 }
 
 #[test]
@@ -105,8 +105,8 @@ fn test_parse_valid_clipboard() {
 
 #[test]
 fn book_single_integration_test() {
-    let settings = Arc::new(Settings::default());
-    let mut bs = BookSingleUI::for_active_day(settings.clone(), None);
+    let settings = into_settings_ref(Settings::default());
+    let mut bs = BookSingleUI::for_active_day(settings, None);
     let text_changed_msg = bs.update(Message::Bs(BookSingleMessage::TextChanged(
         "1 10 c comment".to_string(),
     )));
@@ -136,12 +136,12 @@ fn book_single_integration_test() {
         })
     );
 
-    let work = bs.builder.try_build(Time::hm(11, 0), &settings).unwrap();
+    let work = bs.builder.try_build(Time::hm(11, 0)).unwrap();
     assert_eq!(
         work,
         Work {
-            start: Time::hm(1, 0).into(),
-            end: Time::hm(10, 0).into(),
+            start: Time::hm(1, 0),
+            end: Time::hm(10, 0),
             task: JiraIssue::create("CLIP-1234").unwrap(),
             description: "comment".to_string()
         }
@@ -158,11 +158,14 @@ fn book_single_integration_test() {
     assert_eq!(bs.builder.msg.as_deref(), Some("comment1"));
 
     assert!(matches!(next_letter, None));
-    let on_submit = bs.on_submit_message(&settings);
+    let on_submit = bs.on_submit(StayActive::Yes);
     assert!(
         matches!(
             on_submit,
-            Message::StoreAction(crate::data::Action::Work(_))
+            Some(Message::StoreAction(
+                StayActive::Yes,
+                crate::data::Action::Work(_),
+            ))
         ),
         "{:?}",
         on_submit

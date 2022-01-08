@@ -1,13 +1,17 @@
+use iced_native::widget::{text_input, Column, Row};
+use iced_wgpu::TextInput;
+
+use crate::conf::SettingsRef;
 use crate::data::{Action, ActiveDay, JiraIssue, WorkEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::IssueParsed;
+use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{input_message, style, text, time_info, MainView, Message, QElement};
+use crate::ui::{
+    day_info_message, style, text, time_info, MainView, Message, QElement, StayActive,
+};
 use crate::Settings;
-use iced_native::widget::{text_input, Column, Row};
-use iced_wgpu::TextInput;
-use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub enum IssueEndMessage {
@@ -16,34 +20,35 @@ pub enum IssueEndMessage {
 
 #[derive(Debug)]
 pub struct IssueEndEdit {
+    top_bar: TopBar,
     input_state: text_input::State,
     input: String,
-    input_message: String,
     time: ParseResult<Time, ()>,
     issue: ParseResult<JiraIssue, ()>,
-    settings: Arc<Settings>,
+    settings: SettingsRef,
     default_issue: Option<JiraIssue>,
 }
 
 impl IssueEndEdit {
     pub fn for_active_day(
-        settings: Arc<Settings>,
+        settings: SettingsRef,
         active_day: Option<&ActiveDay>,
     ) -> Box<IssueEndEdit> {
+        let guard = settings.load();
         let default_issue = active_day
-            .and_then(|d| d.current_issue(settings.timeline.time_now()))
+            .and_then(|d| d.current_issue(guard.timeline.time_now()))
             .map(JiraIssue::clone);
 
         Box::new(Self {
+            top_bar: TopBar {
+                title: "End issue:",
+                help_text: "[<time>] [<issue_id>]",
+                info: day_info_message(active_day),
+                settings: settings.clone(),
+            },
             input_state: text_input::State::focused(),
             input: String::new(),
-            input_message: input_message(
-                "End issue",
-                active_day
-                    .map(|d| d.actions())
-                    .unwrap_or(ActiveDay::no_action()),
-            ),
-            time: ParseResult::Valid(settings.timeline.time_now()),
+            time: ParseResult::Valid(guard.timeline.time_now()),
             settings,
             issue: ParseResult::None,
             default_issue,
@@ -51,9 +56,10 @@ impl IssueEndEdit {
     }
 
     fn parse_input(&mut self, input: &str) {
-        let (time, input) = Time::parse_with_offset(&self.settings.timeline, input);
+        let guard = self.settings.load();
+        let (time, input) = Time::parse_with_offset(&guard.timeline, input);
         self.time = time;
-        let IssueParsed { r, rest, .. } = self.settings.issue_parser.parse_task(input.trim_start());
+        let IssueParsed { r, rest, .. } = guard.issue_parser.parse_task(input.trim_start());
         if rest.is_empty() {
             self.issue = r;
         } else {
@@ -61,7 +67,7 @@ impl IssueEndEdit {
         }
     }
 
-    fn on_submit_message(&self) -> Message {
+    fn on_submit(&self, stay_active: StayActive) -> Option<Message> {
         let issue = match &self.issue {
             ParseResult::None => self.default_issue.clone(),
             ParseResult::Valid(i) => Some(i.clone()),
@@ -71,20 +77,18 @@ impl IssueEndEdit {
         match (issue, self.time.as_ref()) {
             (Some(task), ParseResult::Valid(time)) => {
                 let action = WorkEnd { task, ts: *time };
-                Message::StoreAction(Action::WorkEnd(action))
+                Some(Message::StoreAction(stay_active, Action::WorkEnd(action)))
             }
-            _ => Message::Update,
+            _ => None,
         }
     }
 }
 
 impl MainView for IssueEndEdit {
     fn view(&mut self, _settings: &Settings) -> QElement {
-        let on_submit = self.on_submit_message();
         let input = TextInput::new(&mut self.input_state, "now", &self.input, |e| {
             Message::Ie(IssueEndMessage::InputChanged(e))
-        })
-        .on_submit(on_submit);
+        });
 
         let issue_text: String = if let ParseResult::Valid(i) = &self.issue {
             i.ident.clone()
@@ -99,7 +103,7 @@ impl MainView for IssueEndEdit {
         let info = Row::with_children(vec![
             text("Time:"),
             h_space(style::SPACE),
-            time_info(self.settings.timeline.time_now(), self.time.clone()),
+            time_info(self.settings.load().timeline.time_now(), self.time.clone()),
             h_space(style::DSPACE),
             text("Issue:"),
             h_space(style::SPACE),
@@ -107,7 +111,7 @@ impl MainView for IssueEndEdit {
         ]);
 
         Column::with_children(vec![
-            text(&self.input_message),
+            self.top_bar.view(),
             v_space(style::SPACE),
             input.into(),
             v_space(style::SPACE),
@@ -123,7 +127,8 @@ impl MainView for IssueEndEdit {
                 self.input = text;
                 None
             }
-            Message::StoreSuccess => Some(Message::Exit),
+            Message::SubmitCurrent(stay_active) => self.on_submit(stay_active),
+            Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
             _ => None,
         }
     }
@@ -131,16 +136,16 @@ impl MainView for IssueEndEdit {
 
 #[cfg(test)]
 mod test {
+    use crate::conf::into_settings_ref;
     use crate::ui::issue_end_edit::{IssueEndEdit, IssueEndMessage};
-    use crate::ui::{MainView, Message};
+    use crate::ui::{MainView, Message, StayActive};
     use crate::util::StaticTimeline;
     use crate::Settings;
-    use std::sync::Arc;
 
     #[test]
     fn test_issue_end() {
         let timeline = StaticTimeline::parse("2022-1-10 17:00");
-        let settings = Arc::new(Settings::default().with_timeline(timeline));
+        let settings = into_settings_ref(Settings::default().with_timeline(timeline));
         let mut ui = IssueEndEdit::for_active_day(settings.clone(), None);
 
         let on_input = ui.update(Message::Ie(IssueEndMessage::InputChanged(
@@ -148,10 +153,13 @@ mod test {
         )));
         assert!(matches!(on_input, None));
 
-        let on_submit = ui.on_submit_message();
+        let on_submit = ui.on_submit(StayActive::Yes);
         assert!(matches!(
             on_submit,
-            Message::StoreAction(crate::data::Action::WorkEnd(_))
+            Some(Message::StoreAction(
+                StayActive::Yes,
+                crate::data::Action::WorkEnd(_)
+            ))
         ));
     }
 }

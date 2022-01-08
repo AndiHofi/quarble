@@ -18,8 +18,9 @@ use tracing::{debug, error, info, span};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
-use crate::conf::{InitialAction, MainAction, Settings, SettingsSer};
-use crate::ui::main_action::CmdId;
+use crate::conf::Settings;
+use crate::conf::SettingsSer;
+use crate::ui::main_action::{CmdId, InitialAction, MainAction};
 use crate::ui::ViewId;
 
 mod cmd;
@@ -96,7 +97,7 @@ fn main_inner() -> anyhow::Result<()> {
 
     let main_action = MainAction {
         settings: Rc::new(ArcSwap::new(Arc::new(settings))),
-        initial_action,
+        initial_view: initial_action,
         db,
         work_day: Rc::new(RefCell::new(work_day)),
     };

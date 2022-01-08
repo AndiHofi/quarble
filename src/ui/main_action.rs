@@ -1,13 +1,14 @@
+use crate::conf::SettingsRef;
 use crate::data::ActiveDay;
 use crate::db::DB;
-use crate::ui::{SettingsRef, ViewId};
+use crate::ui::ViewId;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct MainAction {
     pub settings: SettingsRef,
-    pub initial_action: ViewId,
+    pub initial_view: ViewId,
     pub db: DB,
     pub work_day: Rc<RefCell<ActiveDay>>,
 }

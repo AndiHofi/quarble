@@ -1,6 +1,7 @@
+use crate::conf::SettingsRef;
 use crate::data::{Action, ActiveDay, NormalizedDay, Normalizer, TimeCockpitExporter};
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{style, text, MainView, Message, QElement, SettingsRef};
+use crate::ui::{style, text, MainView, Message, QElement};
 use crate::Settings;
 use iced_core::Length;
 use iced_native::widget::{
