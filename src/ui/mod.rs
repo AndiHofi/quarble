@@ -8,7 +8,7 @@ use iced_core::{Color, Padding};
 use iced_native::clipboard;
 use iced_wgpu::Text;
 use iced_winit::settings::SettingsWindowConfigurator;
-use iced_winit::widget::Container;
+use iced_winit::widget::{Column, Container};
 use iced_winit::{event, Command, Subscription};
 use iced_winit::{Element, Mode};
 use iced_winit::{Event, Program};
@@ -31,6 +31,9 @@ use crate::ui::main_action::MainAction;
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
 use crate::Settings;
 
+use crate::ui::tab_bar::TabBar;
+pub use view_id::ViewId;
+
 mod book;
 mod book_single;
 mod clip_read;
@@ -43,8 +46,10 @@ mod issue_end_edit;
 mod issue_start_edit;
 pub mod main_action;
 mod style;
+mod tab_bar;
 mod top_bar;
 mod util;
+mod view_id;
 mod window_configurator;
 mod work_entry_edit;
 mod work_start_edit;
@@ -94,19 +99,6 @@ impl StayActive {
             Message::Reset
         })
     }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ViewId {
-    Book,
-    CurrentDayUi,
-    FastDayStart,
-    FastDayEnd,
-    BookSingle,
-    BookIssueStart,
-    BookIssueEnd,
-    Export,
-    Exit,
 }
 
 #[derive(Debug, Clone)]
@@ -199,6 +191,7 @@ pub struct Quarble {
     active_day: Option<ActiveDay>,
     active_day_dirty: bool,
     initial_view: ViewId,
+    tab_bar: TabBar,
 }
 
 impl iced_winit::Program for Quarble {
@@ -211,6 +204,7 @@ impl iced_winit::Program for Quarble {
             match current {
                 Message::Error(msg) => eprintln!("Got an error: {}", msg),
                 Message::Exit => {
+                    self.tab_bar.set_active_view(ViewId::CurrentDayUi);
                     self.current_view = CurrentView::Exit(Exit);
                 }
                 Message::UpdateCloseOnSafe(new_value) => update_settings(&self.settings, |s| {
@@ -220,6 +214,7 @@ impl iced_winit::Program for Quarble {
                     if let CurrentView::CdUi(ui) = &mut self.current_view {
                         message = ui.update(Message::Cd(CurrentDayMessage::StartDayChange))
                     } else {
+                        self.tab_bar.set_active_view(ViewId::CurrentDayUi);
                         self.current_view = CurrentView::create(
                             ViewId::CurrentDayUi,
                             self.settings.clone(),
@@ -240,6 +235,7 @@ impl iced_winit::Program for Quarble {
                 },
                 Message::ChangeView(view_id) => {
                     if self.current_view.view_id() != view_id {
+                        self.tab_bar.set_active_view(view_id);
                         self.current_view = CurrentView::create(
                             view_id,
                             self.settings.clone(),
@@ -248,6 +244,7 @@ impl iced_winit::Program for Quarble {
                     }
                 }
                 Message::RefreshView => {
+                    self.tab_bar.set_active_view(self.current_view.view_id());
                     self.current_view = CurrentView::create(
                         self.current_view.view_id(),
                         self.settings.clone(),
@@ -292,6 +289,7 @@ impl iced_winit::Program for Quarble {
                         message = Some(Message::Export(DayExportMessage::TriggerExport));
                     }
                     ViewId::CurrentDayUi => {
+                        self.tab_bar.set_active_view(ViewId::Export);
                         self.current_view = CurrentView::create(
                             ViewId::Export,
                             self.settings.clone(),
@@ -358,14 +356,15 @@ impl iced_winit::Program for Quarble {
             CurrentView::Ie(ie) => ie.view(&settings),
             CurrentView::Export(ex) => ex.view(&settings),
         };
-        let element: QElement = Container::new(content)
+        let element = Container::new(content)
             .padding(Padding::new(style::WINDOW_PADDING))
             .into();
+        let main: QElement = Column::with_children(vec![self.tab_bar.view(), element]).into();
 
         if self.settings.load().debug {
-            element.explain(Color::new(0.5, 0.5, 0.5, 0.5))
+            main.explain(Color::new(0.5, 0.5, 0.5, 0.5))
         } else {
-            element
+            main
         }
     }
 }
@@ -393,6 +392,7 @@ impl iced_winit::Application for Quarble {
             active_day,
             active_day_dirty: false,
             initial_view: flags.initial_view,
+            tab_bar: TabBar::new(flags.initial_view),
         };
 
         let command = if let Some(initial_message) = initial_message {
