@@ -25,6 +25,7 @@ pub struct IssueStartEdit {
     input: String,
     builder: IssueStartBuilder,
     settings: SettingsRef,
+    orig: Option<WorkStart>,
 }
 
 impl IssueStartEdit {
@@ -43,7 +44,15 @@ impl IssueStartEdit {
             input: String::new(),
             builder: IssueStartBuilder::default(),
             settings,
+            orig: None,
         })
+    }
+
+    pub fn entry_to_edit(&mut self, e: WorkStart) {
+        let input = format!("{} {} {}", e.ts, e.task.ident, e.description);
+        self.builder.parse_input(&self.settings.load(), &input);
+        self.input = input;
+        self.orig = Some(e);
     }
 
     fn follow_up(&mut self) -> Option<Message> {
@@ -56,9 +65,21 @@ impl IssueStartEdit {
     }
 
     fn on_submit(&mut self, stay_active: StayActive) -> Option<Message> {
-        self.builder
-            .try_build()
-            .map(|w| Message::StoreAction(stay_active, Action::WorkStart(w)))
+        let value = self.builder.try_build().map(Action::WorkStart);
+
+        if let Some(value) = value {
+            if let Some(orig) = std::mem::take(&mut self.orig) {
+                Some(Message::ModifyAction {
+                    stay_active,
+                    orig: Box::new(Action::WorkStart(orig)),
+                    update: Box::new(value),
+                })
+            } else {
+                Some(Message::StoreAction(stay_active, value))
+            }
+        } else {
+            None
+        }
     }
 }
 

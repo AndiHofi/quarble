@@ -1,6 +1,7 @@
 use crate::conf::{Settings, SettingsRef};
 use crate::data::{Action, ActiveDay, Day};
 use crate::parsing::time::Time;
+use crate::ui::message::EditAction;
 use crate::ui::util::h_space;
 use crate::ui::{style, text};
 use crate::ui::{MainView, Message, QElement};
@@ -15,6 +16,7 @@ pub enum CurrentDayMessage {
     DayTextChanged(String),
     StartDayChange,
     CommitDayChange,
+    RequestEdit(usize),
 }
 
 #[derive(Clone, Debug)]
@@ -25,10 +27,32 @@ pub struct CurrentDayUI {
     edit_state: Option<text_input::State>,
     day_value: String,
     settings: SettingsRef,
+    entries: Vec<Entry>,
+}
+
+#[derive(Clone, Debug)]
+struct Entry {
+    id: usize,
+    button: button::State,
+    action: Action,
 }
 
 impl CurrentDayUI {
     pub fn for_active_day(settings: SettingsRef, active_day: Option<&ActiveDay>) -> Box<Self> {
+        let entries = if let Some(e) = active_day {
+            e.actions()
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(id, action)| Entry {
+                    id,
+                    button: button::State::new(),
+                    action,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         Box::new(Self {
             data: active_day.cloned().unwrap_or_default(),
             scroll_state: Default::default(),
@@ -36,12 +60,13 @@ impl CurrentDayUI {
             edit_state: None,
             day_value: String::new(),
             settings,
+            entries,
         })
     }
 }
 
 impl MainView for CurrentDayUI {
-    fn view(&mut self, _settings: &Settings) -> QElement<'_> {
+    fn view(&mut self, _settings: &Settings) -> QElement {
         let day = self.data.get_day().to_string();
         let active_issue = self
             .data
@@ -49,7 +74,8 @@ impl MainView for CurrentDayUI {
             .map(|i| i.to_string())
             .unwrap_or_else(|| "No active issue".to_string());
 
-        let entries: Vec<QElement<'static>> = self.data.actions().iter().map(action_row).collect();
+        let entries: Vec<QElement> = self.entries.iter_mut().map(edit_action_row).collect();
+
         let mut entries_scroll = Scrollable::new(&mut self.scroll_state).width(Length::Fill);
         for e in entries {
             entries_scroll = entries_scroll.push(e);
@@ -126,12 +152,27 @@ impl MainView for CurrentDayUI {
                     parsed.get().map(Message::ChangeDay)
                 }
             }
+            Message::Cd(CurrentDayMessage::RequestEdit(id)) => self
+                .entries
+                .get(id)
+                .map(|e| Message::EditAction(EditAction(Box::new(e.action.clone())))),
             _ => None,
         }
     }
 }
 
-pub fn action_row(action: &Action) -> QElement<'static> {
+fn edit_action_row(entry: &mut Entry) -> QElement {
+    let button = Button::new(&mut entry.button, text("E"))
+        .on_press(Message::Cd(CurrentDayMessage::RequestEdit(entry.id)));
+    Row::with_children(vec![
+        button.into(),
+        h_space(style::DSPACE),
+        action_row(&entry.action),
+    ])
+    .into()
+}
+
+pub fn action_row(action: &Action) -> QElement {
     let w = Length::Units(50);
     let s = Length::Units(35);
     let time = |t: Time| {

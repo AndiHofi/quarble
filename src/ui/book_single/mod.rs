@@ -5,7 +5,7 @@ use iced_winit::widget::{text_input, Column};
 use parsing::WorkBuilder;
 
 use crate::conf::{Settings, SettingsRef};
-use crate::data::{ActiveDay, JiraIssue, Work};
+use crate::data::{Action, ActiveDay, JiraIssue, Work};
 use crate::parsing::parse_result::ParseResult;
 use crate::ui::clip_read::ClipRead;
 use crate::ui::top_bar::TopBar;
@@ -28,6 +28,7 @@ pub struct BookSingleUI {
     data: Option<Work>,
     builder: WorkBuilder,
     settings: SettingsRef,
+    orig: Option<Work>,
 }
 
 impl BookSingleUI {
@@ -48,7 +49,15 @@ impl BookSingleUI {
             data: None,
             builder: Default::default(),
             settings,
+            orig: None,
         })
+    }
+
+    pub fn entry_to_edit(&mut self, e: Work) {
+        let text = format!("{} {} {} {}", e.start, e.end, e.task.ident, e.description);
+        self.parse_input(&text);
+        self.input = text;
+        self.orig = Some(e);
     }
 
     fn follow_up_msg(&mut self) -> Option<Message> {
@@ -60,10 +69,25 @@ impl BookSingleUI {
         }
     }
 
-    fn on_submit(&self, sa: StayActive) -> Option<Message> {
-        self.builder
+    fn on_submit(&mut self, stay_active: StayActive) -> Option<Message> {
+        let action = self
+            .builder
             .try_build(self.settings.load().timeline.time_now())
-            .map(|e| Message::StoreAction(sa, crate::data::Action::Work(e)))
+            .map(Action::Work);
+
+        if let Some(action) = action {
+            if let Some(orig) = std::mem::take(&mut self.orig) {
+                Some(Message::ModifyAction {
+                    stay_active,
+                    orig: Box::new(Action::Work(orig)),
+                    update: Box::new(action),
+                })
+            } else {
+                Some(Message::StoreAction(stay_active, action))
+            }
+        } else {
+            None
+        }
     }
 }
 

@@ -27,6 +27,7 @@ pub struct IssueEndEdit {
     issue: ParseResult<JiraIssue, ()>,
     settings: SettingsRef,
     default_issue: Option<JiraIssue>,
+    orig: Option<WorkEnd>,
 }
 
 impl IssueEndEdit {
@@ -52,7 +53,15 @@ impl IssueEndEdit {
             settings,
             issue: ParseResult::None,
             default_issue,
+            orig: None,
         })
+    }
+
+    pub fn entry_to_edit(&mut self, e: WorkEnd) {
+        let text= format!("{} {}", e.ts, e.task.ident);
+        self.parse_input(&text);
+        self.input = text;
+        self.orig = Some(e);
     }
 
     fn parse_input(&mut self, input: &str) {
@@ -67,19 +76,31 @@ impl IssueEndEdit {
         }
     }
 
-    fn on_submit(&self, stay_active: StayActive) -> Option<Message> {
+    fn on_submit(&mut self, stay_active: StayActive) -> Option<Message> {
         let issue = match &self.issue {
             ParseResult::None => self.default_issue.clone(),
             ParseResult::Valid(i) => Some(i.clone()),
             _ => None,
         };
 
-        match (issue, self.time.as_ref()) {
+        let action = match (issue, self.time.as_ref()) {
             (Some(task), ParseResult::Valid(time)) => {
                 let action = WorkEnd { task, ts: *time };
-                Some(Message::StoreAction(stay_active, Action::WorkEnd(action)))
+                Some(Action::WorkEnd(action))
             }
             _ => None,
+        };
+
+        if let Some(action) = action {
+            if let Some(orig) = std::mem::take(&mut self.orig) {
+                Some(Message::ModifyAction {stay_active,
+                orig: Box::new(Action::WorkEnd(orig)),
+                update: Box::new(action)})
+            } else {
+                Some(Message::StoreAction(stay_active, action))
+            }
+        } else {
+            None
         }
     }
 }

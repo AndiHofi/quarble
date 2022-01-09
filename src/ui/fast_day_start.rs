@@ -23,6 +23,7 @@ pub(super) struct FastDayStart {
     limits: Vec<TimeLimit>,
     builder: DayStartBuilder,
     timeline: Timeline,
+    orig: Option<DayStart>,
 }
 
 impl FastDayStart {
@@ -48,8 +49,20 @@ impl FastDayStart {
                 location: ParseResult::Valid(Location::Office),
             },
             timeline,
+            orig: None,
         })
     }
+
+    pub fn entry_to_edit(&mut self, e: DayStart) {
+        let loc = match e.location {
+            Location::Office => "o",
+            Location::Home => "h",
+            Location::Other(ref l) => l.0.as_str(),
+        };
+        self.update_text(format!("{} {}", loc, e.ts));
+        self.orig = Some(e);
+    }
+
     fn update_text(&mut self, new_value: String) -> Option<Message> {
         self.builder
             .parse_value(&self.timeline, &self.limits, &new_value);
@@ -190,7 +203,9 @@ impl MainView for FastDayStart {
             Message::Fds(msg) => match msg {
                 FastDayStartMessage::TextChanged(new_value) => self.update_text(new_value),
             },
-            Message::SubmitCurrent(stay_active) => on_submit(stay_active, self.value.as_ref()),
+            Message::SubmitCurrent(stay_active) => {
+                on_submit(stay_active, &mut self.orig, self.value.as_ref())
+            }
             Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
             _ => None,
         }
@@ -201,8 +216,25 @@ fn on_input_change(text: String) -> Message {
     Message::Fds(FastDayStartMessage::TextChanged(text))
 }
 
-fn on_submit(stay_active: StayActive, value: Option<&DayStart>) -> Option<Message> {
-    value.map(|v| Message::StoreAction(stay_active, Action::DayStart(v.clone())))
+fn on_submit(
+    stay_active: StayActive,
+    orig: &mut Option<DayStart>,
+    value: Option<&DayStart>,
+) -> Option<Message> {
+    if let Some(value) = value {
+        let value = Action::DayStart(value.clone());
+        if let Some(orig) = std::mem::take(orig) {
+            Some(Message::ModifyAction {
+                stay_active,
+                orig: Box::new(Action::DayStart(orig)),
+                update: Box::new(value),
+            })
+        } else {
+            Some(Message::StoreAction(stay_active, value))
+        }
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

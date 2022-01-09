@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use iced_core::keyboard::{KeyCode, Modifiers};
@@ -20,18 +19,20 @@ use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::TimeLimit;
 use crate::ui::book::Book;
-use crate::ui::book_single::{BookSingleMessage, BookSingleUI};
+use crate::ui::book_single::BookSingleUI;
 use crate::ui::current_day::{CurrentDayMessage, CurrentDayUI};
 use crate::ui::export::{DayExportMessage, DayExportUi};
-use crate::ui::fast_day_end::{FastDayEnd, FastDayEndMessage};
-use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
-use crate::ui::issue_end_edit::{IssueEndEdit, IssueEndMessage};
-use crate::ui::issue_start_edit::{IssueStartEdit, IssueStartMessage};
+use crate::ui::fast_day_end::FastDayEnd;
+use crate::ui::fast_day_start::FastDayStart;
+use crate::ui::issue_end_edit::IssueEndEdit;
+use crate::ui::issue_start_edit::IssueStartEdit;
 use crate::ui::main_action::MainAction;
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
 use crate::Settings;
 
+use crate::ui::message::EditAction;
 use crate::ui::tab_bar::TabBar;
+pub use message::Message;
 pub use view_id::ViewId;
 
 mod book;
@@ -45,6 +46,7 @@ pub mod fast_day_start;
 mod issue_end_edit;
 mod issue_start_edit;
 pub mod main_action;
+mod message;
 mod style;
 mod tab_bar;
 mod top_bar;
@@ -98,64 +100,6 @@ impl StayActive {
         } else {
             Message::Reset
         })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    Update,
-    Exit,
-    StartInsert,
-    Edit,
-    Next,
-    Previous,
-    Up,
-    Down,
-    CopyValue,
-    RequestDayChange,
-    ReadClipboard,
-    WriteClipboard(Arc<String>),
-    ChangeView(ViewId),
-    RefreshView,
-    Reset,
-    SubmitCurrent(StayActive),
-    ChangeDay(Day),
-    ClipboardValue(Option<String>),
-    UpdateCloseOnSafe(bool),
-    UpdateStart {
-        id: usize,
-        input: String,
-        valid: bool,
-    },
-    UpdateEnd {
-        id: usize,
-        input: String,
-        valid: bool,
-    },
-    UpdateDescription {
-        id: usize,
-        input: String,
-    },
-    Export(DayExportMessage),
-    Fds(FastDayStartMessage),
-    Fde(FastDayEndMessage),
-    Bs(BookSingleMessage),
-    Is(IssueStartMessage),
-    Ie(IssueEndMessage),
-    Cd(CurrentDayMessage),
-    StoreAction(StayActive, Action),
-    ModifyAction {
-        stay_active: StayActive,
-        orig: Box<Action>,
-        update: Box<Action>,
-    },
-    StoreSuccess(StayActive),
-    Error(String),
-}
-
-impl Default for Message {
-    fn default() -> Self {
-        Message::Update
     }
 }
 
@@ -253,6 +197,14 @@ impl iced_winit::Program for Quarble {
                 }
                 Message::Reset => {
                     message = Some(Message::ChangeView(self.initial_view));
+                }
+                Message::EditAction(EditAction(action)) => {
+                    self.current_view = CurrentView::create_for_edit(
+                        *action,
+                        self.settings.clone(),
+                        self.active_day.as_ref(),
+                    );
+                    self.tab_bar.set_active_view(self.current_view.view_id());
                 }
                 Message::StoreAction(stay_active, action) => {
                     if let Some(ref mut active_day) = self.active_day {
@@ -569,6 +521,41 @@ impl CurrentView {
                 CurrentView::Export(DayExportUi::for_active_day(settings, active_day))
             }
             ViewId::Exit => CurrentView::Exit(Exit),
+        }
+    }
+
+    fn create_for_edit(
+        value: Action,
+        settings: SettingsRef,
+        active_day: Option<&ActiveDay>,
+    ) -> CurrentView {
+        match value {
+            Action::Work(a) => {
+                let mut ui = BookSingleUI::for_active_day(settings, active_day);
+                ui.entry_to_edit(a);
+                CurrentView::Bs(ui)
+            }
+            Action::WorkStart(a) => {
+                let mut ui = IssueStartEdit::for_active_day(settings, active_day);
+                ui.entry_to_edit(a);
+                CurrentView::Is(ui)
+            }
+            Action::WorkEnd(a) => {
+                let mut ui = IssueEndEdit::for_active_day(settings, active_day);
+                ui.entry_to_edit(a);
+                CurrentView::Ie(ui)
+            }
+            Action::DayStart(a) => {
+                let mut ui = FastDayStart::for_work_day(settings, active_day);
+                ui.entry_to_edit(a);
+                CurrentView::Fds(ui)
+            }
+            Action::DayEnd(a) => {
+                let mut ui = FastDayEnd::for_work_day(settings, active_day);
+                ui.entry_to_edit(a);
+                CurrentView::Fde(ui)
+            }
+            _ => CurrentView::create(ViewId::CurrentDayUi, settings, active_day),
         }
     }
 }
