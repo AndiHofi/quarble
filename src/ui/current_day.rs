@@ -88,7 +88,7 @@ impl MainView for CurrentDayUI {
         let (on_press, message) = if self.edit_state.is_some() {
             (Message::Cd(CurrentDayMessage::CommitDayChange), "Commit")
         } else {
-            (Message::Cd(CurrentDayMessage::StartDayChange), "Change day")
+            (Message::Cd(CurrentDayMessage::StartDayChange), "Change day (d)")
         };
         if let Some(edit_state) = &mut self.edit_state {
             let on_submit = Message::Cd(CurrentDayMessage::CommitDayChange);
