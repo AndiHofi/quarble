@@ -63,6 +63,22 @@ impl Action {
     pub fn issue_id(&self) -> Option<&str> {
         self.issue().map(|i| i.ident.as_str())
     }
+
+    pub fn ordinal(&self) -> usize {
+        match self {
+            Action::Work(_) => 0,
+            Action::WorkEvent(_) => 1,
+            Action::WorkStart(_) => 2,
+            Action::WorkEnd(_) => 3,
+            Action::DayStart(_) => 4,
+            Action::DayEnd(_) => 5,
+            Action::DayOff => 6,
+            Action::ZA(_) => 7,
+            Action::Vacation => 8,
+            Action::Sick => 9,
+            Action::Doctor(_) => 10,
+        }
+    }
 }
 
 impl TimedAction for Action {
@@ -90,7 +106,10 @@ impl PartialOrd for Action {
 
 impl Ord for Action {
     fn cmp(&self, other: &Self) -> Ordering {
-        TimedAction::cmp(self, other)
+        match TimedAction::cmp(self, other) {
+            Ordering::Equal => self.ordinal().cmp(&other.ordinal()),
+            o => o,
+        }
     }
 }
 

@@ -58,7 +58,7 @@ impl IssueEndEdit {
     }
 
     pub fn entry_to_edit(&mut self, e: WorkEnd) {
-        let text= format!("{} {}", e.ts, e.task.ident);
+        let text = format!("{} {}", e.ts, e.task.ident);
         self.parse_input(&text);
         self.input = text;
         self.orig = Some(e);
@@ -93,9 +93,11 @@ impl IssueEndEdit {
 
         if let Some(action) = action {
             if let Some(orig) = std::mem::take(&mut self.orig) {
-                Some(Message::ModifyAction {stay_active,
-                orig: Box::new(Action::WorkEnd(orig)),
-                update: Box::new(action)})
+                Some(Message::ModifyAction {
+                    stay_active,
+                    orig: Box::new(Action::WorkEnd(orig)),
+                    update: Box::new(action),
+                })
             } else {
                 Some(Message::StoreAction(stay_active, action))
             }

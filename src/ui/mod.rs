@@ -30,7 +30,7 @@ use crate::ui::main_action::MainAction;
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
 use crate::Settings;
 
-use crate::ui::message::EditAction;
+use crate::ui::message::{DeleteAction, EditAction};
 use crate::ui::tab_bar::TabBar;
 pub use message::Message;
 pub use view_id::ViewId;
@@ -115,6 +115,7 @@ pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     };
     let renderer_settings = iced_wgpu::Settings {
         antialiasing: Some(iced_wgpu::settings::Antialiasing::MSAAx4),
+        default_text_size: 18,
         ..iced_wgpu::Settings::from_env()
     };
     iced_winit::application::run_with_window_configurator::<
@@ -206,15 +207,28 @@ impl iced_winit::Program for Quarble {
                     );
                     self.tab_bar.set_active_view(self.current_view.view_id());
                 }
+                Message::DeleteAction(DeleteAction(_stay_active, action)) => {
+                    if let Some(ref mut active_day) = self.active_day {
+                        if active_day.actions_mut().remove(&action) {
+                            message = match self.db.store_day(active_day.get_day(), active_day) {
+                                Ok(()) => Some(Message::RefreshView),
+                                Err(e) => Some(Message::Error(format!("{:?}", e))),
+                            }
+                        } else {
+                            message =
+                                Some(Message::Error("Cannot find action to delete".to_string()));
+                        }
+                    }
+                }
                 Message::StoreAction(stay_active, action) => {
                     if let Some(ref mut active_day) = self.active_day {
                         active_day.add_action(action);
-                        message = match self.db.store_day(active_day.get_day(), active_day) {
-                            Ok(()) => Some(Message::StoreSuccess(
-                                stay_active.apply_settings(&self.settings.load()),
-                            )),
-                            Err(e) => Some(Message::Error(format!("{:?}", e))),
-                        };
+                        message = store_active_day(
+                            &self.db,
+                            &self.settings.load(),
+                            stay_active,
+                            active_day,
+                        );
                     }
                 }
                 Message::ModifyAction {
@@ -226,9 +240,12 @@ impl iced_winit::Program for Quarble {
                         let actions = active_day.actions_mut();
                         if actions.remove(&orig) {
                             actions.insert(*update);
-                            message = Some(Message::StoreSuccess(
-                                stay_active.apply_settings(&self.settings.load()),
-                            ));
+                            message = store_active_day(
+                                &self.db,
+                                &self.settings.load(),
+                                stay_active,
+                                active_day,
+                            );
                         } else {
                             message = Some(Message::Error(
                                 "Could not update action. Did not find original".to_string(),
@@ -318,6 +335,20 @@ impl iced_winit::Program for Quarble {
         } else {
             main
         }
+    }
+}
+
+impl Quarble {}
+
+fn store_active_day(
+    db: &DB,
+    settings: &Settings,
+    stay_active: StayActive,
+    active_day: &ActiveDay,
+) -> Option<Message> {
+    match db.store_day(active_day.get_day(), active_day) {
+        Ok(()) => Some(Message::StoreSuccess(stay_active.apply_settings(settings))),
+        Err(e) => Some(Message::Error(format!("{:?}", e))),
     }
 }
 

@@ -43,32 +43,46 @@ impl TabBar {
 
         let buttons: Vec<QElement> = vec![
             h_space(style::TAB_SPACE),
-            tab_button(active,
-                       &mut self.current_day_ui,
-                       "Overview (1)",
-                       ViewId::CurrentDayUi,
+            tab_button(
+                active,
+                &mut self.current_day_ui,
+                "Overview (1)",
+                ViewId::CurrentDayUi,
             ),
             h_space(style::TAB_SPACE),
-            tab_button(active,
-                       &mut self.fast_day_start,
-                       "Start work (o)",
-                       ViewId::FastDayStart,
+            tab_button(
+                active,
+                &mut self.fast_day_start,
+                "Start work (o)",
+                ViewId::FastDayStart,
             ),
             h_space(style::TAB_SPACE),
-            tab_button(active, &mut self.fast_day_end, "Stop work (l)", ViewId::FastDayEnd),
-            h_space(style::TAB_SPACE),
-            tab_button(active, &mut self.book_single, "Book issue (i)", ViewId::BookSingle),
-            h_space(style::TAB_SPACE),
-            tab_button(active,
-                       &mut self.book_issue_start,
-                       "Start issue (s)",
-                       ViewId::BookIssueStart,
+            tab_button(
+                active,
+                &mut self.fast_day_end,
+                "Stop work (l)",
+                ViewId::FastDayEnd,
             ),
             h_space(style::TAB_SPACE),
-            tab_button(active,
-                       &mut self.book_issue_end,
-                       "End issue (e)",
-                       ViewId::BookIssueEnd,
+            tab_button(
+                active,
+                &mut self.book_single,
+                "Book issue (i)",
+                ViewId::BookSingle,
+            ),
+            h_space(style::TAB_SPACE),
+            tab_button(
+                active,
+                &mut self.book_issue_start,
+                "Start issue (s)",
+                ViewId::BookIssueStart,
+            ),
+            h_space(style::TAB_SPACE),
+            tab_button(
+                active,
+                &mut self.book_issue_end,
+                "End issue (e)",
+                ViewId::BookIssueEnd,
             ),
             h_space(style::TAB_SPACE),
             tab_button(active, &mut self.export, "Export (x)", ViewId::Export),
@@ -85,8 +99,14 @@ impl TabBar {
     }
 }
 
-fn tab_button<'a>(active: ViewId, s: &'a mut button::State, text: &'static str, v: ViewId) -> QElement<'a> {
-    let button = Button::new(s, Text::new(text)).on_press(Message::ChangeView(v));
+fn tab_button<'a>(
+    active: ViewId,
+    s: &'a mut button::State,
+    text: &'static str,
+    v: ViewId,
+) -> QElement<'a> {
+    let button =
+        Button::new(s, Text::new(text).font(style::button_font())).on_press(Message::ChangeView(v));
     let style: Box<dyn button::StyleSheet + 'static> = if v == active {
         Box::new(style::ActiveTab)
     } else {

@@ -1,6 +1,4 @@
-use std::sync::Arc;
 use crate::data::{Action, Day};
-use crate::ui::{StayActive, ViewId};
 use crate::ui::book_single::BookSingleMessage;
 use crate::ui::current_day::CurrentDayMessage;
 use crate::ui::export::DayExportMessage;
@@ -8,6 +6,8 @@ use crate::ui::fast_day_end::FastDayEndMessage;
 use crate::ui::fast_day_start::FastDayStartMessage;
 use crate::ui::issue_end_edit::IssueEndMessage;
 use crate::ui::issue_start_edit::IssueStartMessage;
+use crate::ui::{StayActive, ViewId};
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -52,6 +52,7 @@ pub enum Message {
     Ie(IssueEndMessage),
     Cd(CurrentDayMessage),
     EditAction(EditAction),
+    DeleteAction(DeleteAction),
     StoreAction(StayActive, Action),
     ModifyAction {
         stay_active: StayActive,
@@ -70,6 +71,9 @@ impl Default for Message {
 
 #[derive(Clone, Debug)]
 pub struct EditAction(pub Box<Action>);
+
+#[derive(Clone, Debug)]
+pub struct DeleteAction(pub StayActive, pub Box<Action>);
 
 #[derive(Clone, Debug)]
 struct ModifyAction {

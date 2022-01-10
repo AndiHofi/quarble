@@ -1,13 +1,13 @@
 use crate::conf::{Settings, SettingsRef};
 use crate::data::{Action, ActiveDay, Day};
 use crate::parsing::time::Time;
-use crate::ui::message::EditAction;
+use crate::ui::message::{DeleteAction, EditAction};
 use crate::ui::util::h_space;
-use crate::ui::{style, text};
+use crate::ui::{style, StayActive};
 use crate::ui::{MainView, Message, QElement};
 use iced_core::alignment::Horizontal;
 use iced_core::Length;
-use iced_native::widget::{button, text_input, Button};
+use iced_native::widget::{button, text_input};
 use iced_wgpu::TextInput;
 use iced_winit::widget::{scrollable, Column, Container, Row, Scrollable, Space, Text};
 
@@ -17,6 +17,7 @@ pub enum CurrentDayMessage {
     StartDayChange,
     CommitDayChange,
     RequestEdit(usize),
+    RequestDelete(usize),
 }
 
 #[derive(Clone, Debug)]
@@ -33,7 +34,8 @@ pub struct CurrentDayUI {
 #[derive(Clone, Debug)]
 struct Entry {
     id: usize,
-    button: button::State,
+    edit_button: button::State,
+    delete_button: button::State,
     action: Action,
 }
 
@@ -46,7 +48,8 @@ impl CurrentDayUI {
                 .enumerate()
                 .map(|(id, action)| Entry {
                     id,
-                    button: button::State::new(),
+                    edit_button: button::State::new(),
+                    delete_button: button::State::new(),
                     action,
                 })
                 .collect()
@@ -88,7 +91,10 @@ impl MainView for CurrentDayUI {
         let (on_press, message) = if self.edit_state.is_some() {
             (Message::Cd(CurrentDayMessage::CommitDayChange), "Commit")
         } else {
-            (Message::Cd(CurrentDayMessage::StartDayChange), "Change day (d)")
+            (
+                Message::Cd(CurrentDayMessage::StartDayChange),
+                "Change day (d)",
+            )
         };
         if let Some(edit_state) = &mut self.edit_state {
             let on_submit = Message::Cd(CurrentDayMessage::CommitDayChange);
@@ -110,7 +116,7 @@ impl MainView for CurrentDayUI {
         };
         day_row.push(h_space(style::DSPACE));
         day_row.push(
-            Button::new(&mut self.day_select_button, text(message))
+            style::inline_button(&mut self.day_select_button, message)
                 .on_press(on_press)
                 .into(),
         );
@@ -156,16 +162,23 @@ impl MainView for CurrentDayUI {
                 .entries
                 .get(id)
                 .map(|e| Message::EditAction(EditAction(Box::new(e.action.clone())))),
+            Message::Cd(CurrentDayMessage::RequestDelete(id)) => self.entries.get(id).map(|e| {
+                Message::DeleteAction(DeleteAction(StayActive::Yes, Box::new(e.action.clone())))
+            }),
             _ => None,
         }
     }
 }
 
 fn edit_action_row(entry: &mut Entry) -> QElement {
-    let button = Button::new(&mut entry.button, text("E"))
+    let delete_button = style::inline_button(&mut entry.delete_button, "D")
+        .on_press(Message::Cd(CurrentDayMessage::RequestDelete(entry.id)));
+    let edit_button = style::inline_button(&mut entry.edit_button, "E")
         .on_press(Message::Cd(CurrentDayMessage::RequestEdit(entry.id)));
     Row::with_children(vec![
-        button.into(),
+        delete_button.into(),
+        h_space(Length::Units(3)),
+        edit_button.into(),
         h_space(style::DSPACE),
         action_row(&entry.action),
     ])
