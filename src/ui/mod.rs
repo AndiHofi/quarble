@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use iced_core::keyboard::{KeyCode, Modifiers};
@@ -13,7 +14,9 @@ use iced_winit::{Element, Mode};
 use iced_winit::{Event, Program};
 
 use crate::conf::{update_settings, SettingsRef};
-use crate::data::{Action, ActiveDay, Day, TimedAction};
+use crate::data::{
+    Action, ActiveDay, Day, RecentIssues, RecentIssuesData, TimedAction, WeekDayForwarder,
+};
 use crate::db::DB;
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
@@ -31,7 +34,9 @@ use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
 use crate::Settings;
 
 use crate::ui::message::{DeleteAction, EditAction};
+use crate::ui::recent_issues_view::RecentIssuesView;
 use crate::ui::tab_bar::TabBar;
+use crate::ui::util::v_space;
 pub use message::Message;
 pub use view_id::ViewId;
 
@@ -47,6 +52,7 @@ mod issue_end_edit;
 mod issue_start_edit;
 pub mod main_action;
 mod message;
+mod recent_issues_view;
 mod style;
 mod tab_bar;
 mod top_bar;
@@ -137,6 +143,7 @@ pub struct Quarble {
     active_day_dirty: bool,
     initial_view: ViewId,
     tab_bar: TabBar,
+    recent_view: RecentIssuesView,
 }
 
 impl iced_winit::Program for Quarble {
@@ -166,6 +173,14 @@ impl iced_winit::Program for Quarble {
                             self.active_day.as_ref(),
                         );
                         message = Some(Message::Cd(CurrentDayMessage::StartDayChange));
+                    }
+                }
+                Message::ChangeDayRelative(amount, forwarder) => {
+                    if let Some(active) = &self.active_day {
+                        let day = active
+                            .get_day()
+                            .add_with_forwarder(amount, forwarder.as_ref());
+                        message = Some(Message::ChangeDay(day))
                     }
                 }
                 Message::ChangeDay(day) => match self.db.get_day(day) {
@@ -222,12 +237,16 @@ impl iced_winit::Program for Quarble {
                 }
                 Message::StoreAction(stay_active, action) => {
                     if let Some(ref mut active_day) = self.active_day {
+                        if let Some(issue) = active_day.active_issue().cloned() {
+                            self.recent_view.update(Message::IssueUsed(issue));
+                        }
                         active_day.add_action(action);
                         message = store_active_day(
                             &self.db,
                             &self.settings.load(),
                             stay_active,
                             active_day,
+                            self.recent_view.export_data(),
                         );
                     }
                 }
@@ -239,12 +258,17 @@ impl iced_winit::Program for Quarble {
                     if let Some(ref mut active_day) = self.active_day {
                         let actions = active_day.actions_mut();
                         if actions.remove(&orig) {
+                            if let Some(issue) = update.issue().cloned() {
+                                self.recent_view.update(Message::IssueUsed(issue));
+                            }
                             actions.insert(*update);
+
                             message = store_active_day(
                                 &self.db,
                                 &self.settings.load(),
                                 stay_active,
                                 active_day,
+                                self.recent_view.export_data(),
                             );
                         } else {
                             message = Some(Message::Error(
@@ -313,6 +337,7 @@ impl iced_winit::Program for Quarble {
     }
 
     fn view(&mut self) -> Element<'_, Self::Message, Self::Renderer> {
+        let view_id = self.current_view.view_id();
         let settings = self.settings.load();
         let content = match &mut self.current_view {
             CurrentView::Book(book) => book.view(&settings),
@@ -328,8 +353,14 @@ impl iced_winit::Program for Quarble {
         let element = Container::new(content)
             .padding(Padding::new(style::WINDOW_PADDING))
             .into();
-        let main: QElement = Column::with_children(vec![self.tab_bar.view(), element]).into();
+        let mut main = Column::with_children(vec![self.tab_bar.view(), element]);
+        if view_id.show_recent() {
+            main = main
+                .push(v_space(style::SPACE))
+                .push(self.recent_view.view(&settings));
+        }
 
+        let main: QElement = main.into();
         if self.settings.load().debug {
             main.explain(Color::new(0.5, 0.5, 0.5, 0.5))
         } else {
@@ -345,11 +376,18 @@ fn store_active_day(
     settings: &Settings,
     stay_active: StayActive,
     active_day: &ActiveDay,
+    recent_data: RecentIssuesData,
 ) -> Option<Message> {
-    match db.store_day(active_day.get_day(), active_day) {
+    let issue_store_msg = match db.store_day(active_day.get_day(), active_day) {
         Ok(()) => Some(Message::StoreSuccess(stay_active.apply_settings(settings))),
         Err(e) => Some(Message::Error(format!("{:?}", e))),
+    };
+
+    if let Err(e) = db.store_recent(&recent_data) {
+        eprintln!("Storing recent issues failed: {:?}", e);
     }
+
+    issue_store_msg
 }
 
 impl iced_winit::Application for Quarble {
@@ -368,6 +406,10 @@ impl iced_winit::Application for Quarble {
         let current_view =
             CurrentView::create(flags.initial_view, settings.clone(), active_day.as_ref());
 
+        let recent = db.load_recent().unwrap_or_default();
+        let recent_issues = RecentIssues::new(recent, settings.load().timeline.clone(), 9);
+        let recent_view = RecentIssuesView::create(recent_issues);
+
         let mut quarble = Quarble {
             current_view,
             settings,
@@ -376,6 +418,7 @@ impl iced_winit::Application for Quarble {
             active_day_dirty: false,
             initial_view: flags.initial_view,
             tab_bar: TabBar::new(flags.initial_view),
+            recent_view,
         };
 
         let command = if let Some(initial_message) = initial_message {
@@ -452,6 +495,8 @@ fn handle_control_shortcuts(key_code: KeyCode) -> Option<Message> {
         KeyCode::Key1 => Some(Message::ChangeView(ViewId::CurrentDayUi)),
         KeyCode::Key2 => Some(Message::ChangeView(ViewId::Book)),
         KeyCode::Enter | KeyCode::NumpadEnter => Some(Message::SubmitCurrent(StayActive::Yes)),
+        KeyCode::Left => Some(Message::ChangeDayRelative(-1, Arc::new(WeekDayForwarder))),
+        KeyCode::Right => Some(Message::ChangeDayRelative(1, Arc::new(WeekDayForwarder))),
         _ => None,
     }
 }

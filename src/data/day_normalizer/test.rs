@@ -1,13 +1,12 @@
 use super::*;
+use crate::data::active_day::ActiveDayBuilder;
 use crate::data::day_normalizer::day_splits;
-use crate::data::{JiraIssue, Location, WorkEnd};
-use crate::parsing;
+use crate::data::test_support::*;
+use crate::data::{JiraIssue, Location};
 use crate::parsing::time::Time;
-use crate::parsing::time_limit::{TimeLimit, TimeRange};
-use crate::ui::fast_day_start::DayStartBuilder;
-use crate::util::{DefaultTimeline, TimelineProvider};
+use crate::parsing::time_limit::TimeRange;
+
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 #[test]
 fn test_start_end_matching() {
@@ -630,12 +629,15 @@ fn integration_test() {
     };
 
     let normalized = n
-        .create_normalized(&ActiveDay {
-            active_issue: None,
-            actions: BTreeSet::from_iter(bookings),
-            day: Day::ymd(2022, 1, 6),
-            main_location: Location::Home,
-        })
+        .create_normalized(
+            &ActiveDayBuilder {
+                active_issue: None,
+                actions: bookings,
+                day: Day::ymd(2022, 1, 6),
+                main_location: Location::Home,
+            }
+            .build(),
+        )
         .unwrap();
 
     assert_eq!(
@@ -694,12 +696,15 @@ fn integration_test_free_issue() {
     };
 
     let normalized = n
-        .create_normalized(&ActiveDay {
-            active_issue: None,
-            actions: BTreeSet::from_iter(bookings),
-            day: Day::ymd(2022, 1, 6),
-            main_location: Location::Home,
-        })
+        .create_normalized(
+            &ActiveDayBuilder {
+                active_issue: None,
+                actions: bookings,
+                day: Day::ymd(2022, 1, 6),
+                main_location: Location::Home,
+            }
+            .build(),
+        )
         .unwrap();
 
     assert_eq!(
@@ -730,59 +735,4 @@ fn integration_test_free_issue() {
             workn("16", "18", "M-1", "org"),
         ]
     );
-}
-
-fn workn(start: &str, end: &str, issue: &str, description: &str) -> Work {
-    Work {
-        start: time(start),
-        end: time(end),
-        task: JiraIssue::create(issue).unwrap(),
-        description: description.to_string(),
-    }
-}
-
-fn work(start: &str, end: &str, issue: &str, description: &str) -> Action {
-    Action::Work(workn(start, end, issue, description))
-}
-
-fn time(time: &str) -> Time {
-    Time::parse_prefix(time).0.get().unwrap()
-}
-
-fn issue_start(start: &str, issue: &str, description: &str, action: &str) -> Action {
-    Action::WorkStart(WorkStart {
-        ts: time(start),
-        task: JiraIssue {
-            ident: issue.to_string(),
-            description: if description.is_empty() {
-                None
-            } else {
-                Some(description.to_string())
-            },
-            default_action: None,
-        },
-        description: action.to_string(),
-    })
-}
-
-fn issue_end(end: &str, issue: &str) -> Action {
-    Action::WorkEnd(WorkEnd {
-        ts: time(end),
-        task: JiraIssue::create(issue).unwrap(),
-    })
-}
-
-fn day_start(input: &str) -> Action {
-    let timeline: Arc<dyn TimelineProvider> = Arc::new(DefaultTimeline);
-    let mut builder = DayStartBuilder::default();
-    builder.parse_value(&timeline, &[TimeLimit::default()], input);
-    builder.try_build(&timeline).map(Action::DayStart).unwrap()
-}
-
-fn day_end(input: &str) -> Action {
-    let timeline = Arc::new(DefaultTimeline);
-    parsing::parse_day_end(timeline.time_now(), input)
-        .get()
-        .map(|ts| Action::DayEnd(DayEnd { ts }))
-        .unwrap()
 }

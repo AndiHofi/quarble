@@ -1,9 +1,14 @@
-use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter};
+use std::fs::{DirEntry, File, OpenOptions};
+use std::io::{BufReader, BufWriter, ErrorKind};
+use std::ops::RangeBounds;
 use std::path::{Path, PathBuf};
 
-use crate::data::{ActiveDay, Day, JiraIssue};
+use crate::data::{ActiveDay, Day, RecentIssuesData};
+use crate::parsing::time::Time;
 use thiserror::Error;
+
+#[cfg(test)]
+mod test;
 
 #[derive(Debug, Error)]
 pub enum DBErr {
@@ -78,7 +83,7 @@ impl DB {
                 .as_ref()
                 .map(|w| w.main_location().clone())
                 .unwrap_or_default(),
-            prev_work_day.and_then(|w| w.active_issue().map(JiraIssue::clone)),
+            prev_work_day.and_then(|w| w.current_issue(Time::MAX)),
         );
 
         eprintln!("New: {:?}", new_day);
@@ -88,27 +93,28 @@ impl DB {
 
     pub fn load_day(&self, day: Day) -> DBResult<Option<ActiveDay>> {
         let to_load = self.work_day_path(day);
-        if to_load.exists() {
-            let file = File::open(&to_load).map_err(|e| DBErr::CannotOpen(to_load.clone(), e))?;
-            let reader = BufReader::new(file);
-            let work_day: ActiveDay = serde_json::from_reader(reader)
-                .map_err(|e| DBErr::InvalidDBFile(to_load.clone(), e))?;
-            eprintln!("Loaded: {:?}", work_day);
-            Ok(Some(work_day))
-        } else {
-            Ok(None)
-        }
+        self.read_file(to_load)
+    }
+
+    pub fn list_days(&self, range: impl RangeBounds<Day>) -> DBResult<Vec<Day>> {
+        let dirs =
+            std::fs::read_dir(&self.root).map_err(|e| DBErr::NotADirectory(e.to_string()))?;
+
+        let result = dirs
+            .filter_map(|e| e.ok())
+            .filter(is_file)
+            .filter_map(|e| e.file_name().into_string().ok())
+            .filter_map(|e| e.strip_suffix(".json").and_then(|s| Day::parse(s).ok()))
+            .filter(|d| range.contains(d))
+            .collect();
+
+        Ok(result)
     }
 
     pub fn store_day(&self, day: Day, work_day: &ActiveDay) -> DBResult<()> {
         let to_store = self.work_day_path(day);
 
-        let file = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&to_store)
-            .map_err(|e| DBErr::CannotOpen(to_store.clone(), e))?;
+        let file = Self::open_for_write(&to_store)?;
 
         let write = BufWriter::new(file);
         serde_json::to_writer_pretty(write, work_day)
@@ -118,8 +124,62 @@ impl DB {
         Ok(())
     }
 
+    fn open_for_write(to_store: &Path) -> DBResult<File> {
+        OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&to_store)
+            .map_err(|e| DBErr::CannotOpen(to_store.to_owned(), e))
+    }
+
+    pub fn load_recent(&self) -> DBResult<RecentIssuesData> {
+        let to_load = self.recent_issues_file();
+        let loaded: Option<RecentIssuesData> = self.read_file(to_load)?;
+        Ok(loaded.unwrap_or_default())
+    }
+
+    fn recent_issues_file(&self) -> PathBuf {
+        self.root.join("recent.json")
+    }
+
+    pub fn store_recent(&self, data: &RecentIssuesData) -> DBResult<()> {
+        let to_store = self.recent_issues_file();
+        let file = Self::open_for_write(&to_store)?;
+        let write = BufWriter::new(file);
+
+        serde_json::to_writer(write, data).map_err(|_| DBErr::FailedToWrite(to_store.clone()))
+    }
+
     fn work_day_path(&self, day: Day) -> PathBuf {
         let formatted = format!("{}.json", day);
         self.root.join(formatted)
     }
+
+    fn read_file<T: serde::de::DeserializeOwned>(&self, to_load: PathBuf) -> DBResult<Option<T>> {
+        if let Some(file) = handle_not_found(File::open(&to_load))
+            .map_err(|e| DBErr::CannotOpen(to_load.clone(), e))?
+        {
+            let reader = BufReader::new(file);
+            serde_json::from_reader(reader).map_err(|e| DBErr::InvalidDBFile(to_load.clone(), e))
+        } else {
+            Ok(None)
+        }
+    }
+}
+fn handle_not_found<T>(e: std::io::Result<T>) -> std::io::Result<Option<T>> {
+    match e {
+        Ok(t) => Ok(Some(t)),
+        Err(e) => {
+            if e.kind() == ErrorKind::NotFound {
+                Ok(None)
+            } else {
+                Err(e)
+            }
+        }
+    }
+}
+
+fn is_file(entry: &DirEntry) -> bool {
+    entry.file_type().map(|t| t.is_file()).unwrap_or_default()
 }

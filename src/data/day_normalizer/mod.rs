@@ -42,8 +42,8 @@ pub struct Normalizer {
 
 impl Normalizer {
     pub fn create_normalized(&self, current_day: &ActiveDay) -> Result<NormalizedDay, String> {
-        let mut actions = current_day.actions.clone();
-        let mut active_issue = current_day.active_issue.clone();
+        let mut actions = current_day.actions().clone();
+        let mut active_issue = current_day.active_issue().cloned();
 
         let mut splits = day_splits(&mut actions, &mut active_issue)?;
 
@@ -74,7 +74,7 @@ impl Normalizer {
         let final_breaks = calc_breaks(&entries);
 
         Ok(NormalizedDay {
-            date: current_day.day,
+            date: current_day.get_day(),
             entries: entries.into_iter().map(Work::from).collect(),
             orig_breaks,
             final_breaks,

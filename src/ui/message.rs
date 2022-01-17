@@ -1,4 +1,4 @@
-use crate::data::{Action, Day};
+use crate::data::{Action, Day, DayForwarder, JiraIssue};
 use crate::ui::book_single::BookSingleMessage;
 use crate::ui::current_day::CurrentDayMessage;
 use crate::ui::export::DayExportMessage;
@@ -28,7 +28,10 @@ pub enum Message {
     Reset,
     SubmitCurrent(StayActive),
     ChangeDay(Day),
+    ChangeDayRelative(i64, Arc<dyn DayForwarder>),
     ClipboardValue(Option<String>),
+    IssueInput(String),
+    IssueUsed(JiraIssue),
     UpdateCloseOnSafe(bool),
     UpdateStart {
         id: usize,

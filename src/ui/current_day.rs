@@ -3,7 +3,7 @@ use crate::data::{Action, ActiveDay, Day};
 use crate::parsing::time::Time;
 use crate::ui::message::{DeleteAction, EditAction};
 use crate::ui::util::h_space;
-use crate::ui::{style, StayActive};
+use crate::ui::{style, text, StayActive};
 use crate::ui::{MainView, Message, QElement};
 use iced_core::alignment::Horizontal;
 use iced_core::Length;
@@ -71,11 +71,18 @@ impl CurrentDayUI {
 impl MainView for CurrentDayUI {
     fn view(&mut self, _settings: &Settings) -> QElement {
         let day = self.data.get_day().to_string();
-        let active_issue = self
-            .data
-            .active_issue()
-            .map(|i| i.to_string())
-            .unwrap_or_else(|| "No active issue".to_string());
+
+        let active_issue: Row<_, _> = if let Some(active_issue) = self.data.active_issue() {
+            Row::with_children(vec![
+                text(&active_issue.ident),
+                h_space(style::DSPACE),
+                text(active_issue.default_action.as_deref().unwrap_or_default()),
+                h_space(style::DSPACE),
+                text(active_issue.description.as_deref().unwrap_or_default()),
+            ])
+        } else {
+            Row::with_children(vec![text("No active issue")])
+        };
 
         let entries: Vec<QElement> = self.entries.iter_mut().map(edit_action_row).collect();
 
@@ -124,7 +131,7 @@ impl MainView for CurrentDayUI {
         Column::with_children(vec![
             Row::with_children(day_row).into(),
             Space::with_height(style::SPACE).into(),
-            Text::new(active_issue).into(),
+            active_issue.into(),
             Space::with_height(style::SPACE).into(),
             Container::new(entries_scroll)
                 .width(Length::Fill)

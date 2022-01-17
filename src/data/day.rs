@@ -1,9 +1,10 @@
 use crate::parsing::parse_result::ParseResult;
 use crate::util::Timeline;
-use chrono::{Datelike, Weekday};
+use chrono::{Datelike, Duration, Weekday};
 use regex::Regex;
 use serde::{Deserializer, Serializer};
 use std::fmt::{Display, Formatter};
+use std::ops::{Add, Sub};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -24,18 +25,22 @@ impl Day {
     }
 
     pub fn next_work_day(&self) -> Day {
-        self.next(WeekDayForwarder)
+        self.next(&WeekDayForwarder)
+    }
+
+    pub fn next_day(&self) -> Day {
+        self.next(&SimpleDayForwarder)
     }
 
     pub fn prev_day(&self) -> Day {
-        self.prev(SimpleDayForwarder)
+        self.prev(&SimpleDayForwarder)
     }
 
-    pub fn next(&self, forwarder: impl DayForwarder) -> Day {
+    pub fn next(&self, forwarder: &impl DayForwarder) -> Day {
         forwarder.next_day(*self)
     }
 
-    pub fn prev(&self, forwarder: impl DayForwarder) -> Day {
+    pub fn prev(&self, forwarder: &impl DayForwarder) -> Day {
         forwarder.prev_day(*self)
     }
 
@@ -45,6 +50,21 @@ impl Day {
         }
     }
 
+    pub fn parse(input: &str) -> Result<Day, String> {
+        parse_day(input)
+    }
+
+    pub fn iter<F: DayForwarder>(self, forwarder: F) -> DayIter<F> {
+        DayIter {
+            day: self,
+            forwarder,
+        }
+    }
+
+    pub fn day_of_week(self) -> chrono::Weekday {
+        self.date.weekday()
+    }
+
     pub fn parse_day_relative(timeline: &Timeline, input: &str) -> ParseResult<Day, ()> {
         if let Some(c) = RELATIVE_DAY.captures(input) {
             let sign = c.name("sign").unwrap().as_str() == "+";
@@ -52,17 +72,39 @@ impl Day {
             let mut value = timeline.today();
             if sign {
                 for _ in 0..days {
-                    value = value.next(SimpleDayForwarder);
+                    value = value.next(&SimpleDayForwarder);
                 }
             } else {
                 for _ in 0..days {
-                    value = value.prev(SimpleDayForwarder);
+                    value = value.prev(&SimpleDayForwarder);
                 }
             }
             ParseResult::Valid(value)
         } else {
             parse_day(input).map_err(|_| ()).into()
         }
+    }
+
+    pub fn add_with_forwarder(self, amount: i64, forwarder: &dyn DayForwarder) -> Day {
+        let mut result = self;
+        let mut remain = amount;
+        match amount {
+            _ if amount < 0 => {
+                while remain < 0 {
+                    result = forwarder.prev_day(result);
+                    remain += 1;
+                }
+            }
+            _ if amount > 0 => {
+                while remain > 0 {
+                    result = forwarder.next_day(result);
+                    remain -= 1;
+                }
+            }
+            _ => (),
+        }
+
+        result
     }
 }
 
@@ -115,12 +157,34 @@ impl From<chrono::NaiveDate> for Day {
     }
 }
 
+impl From<Day> for chrono::NaiveDate {
+    fn from(d: Day) -> Self {
+        d.date
+    }
+}
+
 impl serde::Serialize for Day {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl Add<i64> for Day {
+    type Output = Self;
+    fn add(self, rhs: i64) -> Self::Output {
+        Day {
+            date: self.date.add(Duration::days(rhs)),
+        }
+    }
+}
+
+impl Sub<i64> for Day {
+    type Output = Self;
+    fn sub(self, rhs: i64) -> Self::Output {
+        self + (-rhs)
     }
 }
 
@@ -150,7 +214,7 @@ impl<'de> serde::de::Visitor<'de> for DayVisitor {
     }
 }
 
-pub trait DayForwarder {
+pub trait DayForwarder: Send + Sync + std::fmt::Debug {
     fn next_day(&self, day: Day) -> Day {
         day.date
             .iter_days()
@@ -175,6 +239,7 @@ pub trait DayForwarder {
     fn is_valid(&self, day: Day) -> bool;
 }
 
+#[derive(Copy, Clone, Debug)]
 pub struct SimpleDayForwarder;
 
 impl DayForwarder for SimpleDayForwarder {
@@ -183,6 +248,7 @@ impl DayForwarder for SimpleDayForwarder {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
 pub struct WeekDayForwarder;
 
 impl DayForwarder for WeekDayForwarder {
@@ -192,10 +258,24 @@ impl DayForwarder for WeekDayForwarder {
     }
 }
 
+pub struct DayIter<Forwarder> {
+    day: Day,
+    forwarder: Forwarder,
+}
+
+impl<F: DayForwarder> Iterator for DayIter<F> {
+    type Item = Day;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.day = self.day.next(&self.forwarder);
+        Some(self.day)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::data::day::Day;
     use crate::data::WeekDayForwarder;
+    use crate::util::{DefaultTimeline, TimelineProvider};
 
     #[test]
     fn day_serde_json() {
@@ -216,7 +296,7 @@ mod test {
     #[test]
     fn prev_work_day() {
         let start_monday = Day::ymd(2021, 11, 29);
-        let prev_friday = start_monday.prev(WeekDayForwarder);
+        let prev_friday = start_monday.prev(&WeekDayForwarder);
         assert_eq!(prev_friday, Day::ymd(2021, 11, 26));
     }
 
@@ -227,5 +307,31 @@ mod test {
         assert_eq!(prev, Day::ymd(2021, 11, 28));
         assert_eq!(prev.prev_day(), Day::ymd(2021, 11, 27));
         assert_eq!(Day::ymd(2021, 1, 1).prev_day(), Day::ymd(2020, 12, 31));
+    }
+
+    #[test]
+    fn test_forwarder_add() {
+        eprintln!(
+            "{}",
+            DefaultTimeline
+                .today()
+                .prev(&WeekDayForwarder)
+                .day_of_week()
+        );
+
+        let start = Day::ymd(2022, 1, 17);
+        let same = start.add_with_forwarder(0, &WeekDayForwarder);
+        assert_eq!(same, start);
+
+        let next = start.add_with_forwarder(6, &WeekDayForwarder);
+        assert_eq!(next, Day::ymd(2022, 1, 25));
+
+        let prev_friday = start.add_with_forwarder(-1, &WeekDayForwarder);
+        dbg!(prev_friday.day_of_week());
+        assert_eq!(prev_friday, Day::ymd(2022, 1, 14));
+
+        let prev = start.add_with_forwarder(-6, &WeekDayForwarder);
+        eprintln!("{}", prev.day_of_week());
+        assert_eq!(prev, Day::ymd(2022, 1, 7));
     }
 }

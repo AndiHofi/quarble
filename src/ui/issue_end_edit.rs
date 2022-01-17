@@ -36,9 +36,7 @@ impl IssueEndEdit {
         active_day: Option<&ActiveDay>,
     ) -> Box<IssueEndEdit> {
         let guard = settings.load();
-        let default_issue = active_day
-            .and_then(|d| d.current_issue(guard.timeline.time_now()))
-            .map(JiraIssue::clone);
+        let default_issue = active_day.and_then(|d| d.current_issue(guard.timeline.time_now()));
 
         Box::new(Self {
             top_bar: TopBar {
@@ -169,7 +167,7 @@ mod test {
     fn test_issue_end() {
         let timeline = StaticTimeline::parse("2022-1-10 17:00");
         let settings = into_settings_ref(Settings::default().with_timeline(timeline));
-        let mut ui = IssueEndEdit::for_active_day(settings.clone(), None);
+        let mut ui = IssueEndEdit::for_active_day(settings, None);
 
         let on_input = ui.update(Message::Ie(IssueEndMessage::InputChanged(
             "+0 QU-42".to_string(),

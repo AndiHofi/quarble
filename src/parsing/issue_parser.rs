@@ -8,10 +8,10 @@ use std::collections::BTreeMap;
 lazy_static! {
     static ref ISSUE_SHORTCUT: Regex = Regex::new(r"^(?P<abbr>[a-zA-Z])\b").unwrap();
     static ref ISSUE: Regex = Regex::new(r"^(?P<id>([a-zA-Z]+-[0-9]+))").unwrap();
-    static ref ISSUE_CLIPBOARD: regex::Regex =
-        regex::RegexBuilder::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]+))(?:(?:\W)+(?P<comment>.*))?")
-            .build()
-            .unwrap();
+    static ref ISSUE_CLIPBOARD: Regex =
+        Regex::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]+))(?:(?:\W)+(?P<comment>.*))?").unwrap();
+    static ref ISSUE_DESCRIPTION: Regex =
+        Regex::new(r"^(?P<id>([a-zA-Z]+-[0-9]+))(?:\W+)(?P<comment>[^#]+)#").unwrap();
 }
 
 #[derive(Clone, Debug, Default)]
@@ -36,7 +36,20 @@ impl IssueParser {
     }
 
     pub fn parse_task<'a>(&self, input: &'a str) -> IssueParsed<'a> {
-        if let Some(c) = ISSUE.captures(input) {
+        if let Some(c) = ISSUE_DESCRIPTION.captures(input) {
+            let id = c.name("id").unwrap().as_str();
+            let comment = c.name("comment").unwrap().as_str();
+            let comment = Some(comment.trim_end().to_string()).filter(|e| !e.is_empty());
+            IssueParsed {
+                r: ParseResult::Valid(JiraIssue {
+                    ident: id.to_string(),
+                    description: comment,
+                    default_action: None,
+                }),
+                input: matching(&c),
+                rest: rest(c, input),
+            }
+        } else if let Some(c) = ISSUE.captures(input) {
             let id = c.name("id").unwrap().as_str();
             IssueParsed {
                 r: ParseResult::Valid(JiraIssue::create(id).unwrap()),
@@ -121,6 +134,7 @@ mod test {
         );
     }
 
+    #[test]
     fn parse_issue() {
         let p = new_parser();
 
@@ -158,11 +172,47 @@ mod test {
             }
         );
         assert_eq!(p.parse_task("QU-98("), valid("QU-98", "("));
+
+        assert_eq!(
+            p.parse_task("QU-789 An issue#work"),
+            valid_desc("QU-789 An issue#", "QU-789", "An issue", "work")
+        );
+
+        assert_eq!(
+            p.parse_task("QU-789 \t An issue \t#work #1"),
+            valid_desc("QU-789 \t An issue \t#", "QU-789", "An issue", "work #1")
+        );
+
+        assert_eq!(
+            p.parse_task("QU-789 \t \t#work 1"),
+            IssueParsed {
+                r: ParseResult::Valid(JiraIssue::create("QU-789").unwrap()),
+                input: "QU-789 \t \t#",
+                rest: "work 1"
+            }
+        );
     }
 
     fn valid_short<'a>(id: &'a str, input: &'a str, rest: &'a str) -> IssueParsed<'a> {
         IssueParsed {
             r: ParseResult::Valid(JiraIssue::create(id).unwrap()),
+            input,
+            rest,
+        }
+    }
+
+    fn valid_desc<'a>(
+        input: &'a str,
+        id: &'a str,
+        desc: &'a str,
+        rest: &'a str,
+    ) -> IssueParsed<'a> {
+        IssueParsed {
+            r: ParseResult::Valid(JiraIssue {
+                ident: id.to_string(),
+                description: Some(desc.to_string()),
+                default_action: None,
+            }),
             input,
             rest,
         }
@@ -177,7 +227,7 @@ mod test {
     }
 
     fn new_parser() -> IssueParser {
-        let p = IssueParser {
+        IssueParser {
             shortcuts: BTreeMap::from_iter(
                 [
                     ('a', JiraIssue::create("A-1").unwrap()),
@@ -185,7 +235,6 @@ mod test {
                 ]
                 .into_iter(),
             ),
-        };
-        p
+        }
     }
 }

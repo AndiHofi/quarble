@@ -37,4 +37,7 @@ default-features = false
 [profile.release]
 lto = true
 
+[dev-dependencies]
+rand = { version = "0.8.4"}
 
+tempfile = "3"

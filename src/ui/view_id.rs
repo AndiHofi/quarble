@@ -14,6 +14,13 @@ pub enum ViewId {
 }
 
 impl ViewId {
+    pub fn show_recent(self) -> bool {
+        matches!(
+            self,
+            ViewId::BookSingle | ViewId::BookIssueStart | ViewId::BookIssueEnd
+        )
+    }
+
     pub fn from_action(action: &Action) -> ViewId {
         match action {
             Action::Work(_) => ViewId::BookSingle,

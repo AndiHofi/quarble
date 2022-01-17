@@ -21,6 +21,7 @@ pub struct Time {
 
 impl Time {
     pub const ZERO: Time = Time::hm(0, 0);
+    pub const MAX: Time = Time::hm(24, 0);
     pub const fn hm(h: u32, m: u32) -> Self {
         if m == 60 {
             if h < 23 {
