@@ -148,7 +148,8 @@ impl DB {
         let file = Self::open_for_write(&to_store)?;
         let write = BufWriter::new(file);
 
-        serde_json::to_writer(write, data).map_err(|_| DBErr::FailedToWrite(to_store.clone()))
+        serde_json::to_writer_pretty(write, data)
+            .map_err(|_| DBErr::FailedToWrite(to_store.clone()))
     }
 
     fn work_day_path(&self, day: Day) -> PathBuf {
