@@ -7,10 +7,11 @@ use crate::conf::{Settings, SettingsRef};
 use crate::data::{Action, ActiveDay, DayEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeLimit, TimeResult};
+use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::v_space;
 use crate::ui::{
-    day_info_message, min_max_booked, style, unbooked_time, MainView, Message, QElement, StayActive,
+    day_info_message, min_max_booked, style, unbooked_time, MainView, Message, QElement,
 };
 
 #[derive(Clone, Debug)]
@@ -18,7 +19,7 @@ pub enum FastDayEndMessage {
     TextChanged(String),
 }
 
-pub(super) struct FastDayEnd {
+pub struct FastDayEnd {
     top_bar: TopBar,
     text: String,
     text_state: text_input::State,

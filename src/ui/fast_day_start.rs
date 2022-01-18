@@ -6,8 +6,9 @@ use crate::data::{Action, ActiveDay, DayStart, Location, TimedAction};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeLimit, TimeResult};
+use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;
-use crate::ui::{day_info_message, style, unbooked_time, MainView, Message, QElement, StayActive};
+use crate::ui::{day_info_message, style, unbooked_time, MainView, Message, QElement};
 use crate::util::Timeline;
 
 #[derive(Clone, Debug)]
@@ -15,7 +16,7 @@ pub enum FastDayStartMessage {
     TextChanged(String),
 }
 
-pub(super) struct FastDayStart {
+pub struct FastDayStart {
     top_bar: TopBar,
     text: String,
     text_state: text_input::State,

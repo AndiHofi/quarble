@@ -8,11 +8,10 @@ use crate::conf::{Settings, SettingsRef};
 use crate::data::{Action, ActiveDay, JiraIssue, Work};
 use crate::parsing::parse_result::ParseResult;
 use crate::ui::clip_read::ClipRead;
+use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{
-    day_info_message, style, text, time_info, MainView, Message, QElement, StayActive,
-};
+use crate::ui::{day_info_message, style, text, time_info, MainView, Message, QElement};
 
 mod parsing;
 

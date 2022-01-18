@@ -6,7 +6,7 @@ use crate::ui::Message::{UpdateDescription, UpdateEnd, UpdateStart};
 use crate::ui::{MainView, Message, QElement};
 use iced_winit::widget::{scrollable, Column, Row, Rule, Scrollable, Space, Text};
 
-pub(super) struct Book {
+pub struct Book {
     entries: Vec<Box<dyn EntryEdit>>,
     current: usize,
     scroll_state: scrollable::State,

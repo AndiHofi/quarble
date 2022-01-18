@@ -46,7 +46,7 @@ fn test_load_just_stored_day() {
         task: JiraIssue::create("A-1").unwrap(),
         description: "Description1".to_string(),
     }));
-    db.store_day(*DAY0, &day0_data).unwrap();
+    db.store_day(&day0_data).unwrap();
 
     let reloaded = db.get_day(*DAY0).unwrap();
     assert_eq!(reloaded, day0_data);
@@ -62,7 +62,7 @@ fn test_load_previous_day() {
         task: JiraIssue::create("A-1").unwrap(),
         description: "Description1".to_string(),
     }));
-    db.store_day(*DAY0, &day0_data).unwrap();
+    db.store_day(&day0_data).unwrap();
 
     let next_day = db.get_day(DAY0.next(&SimpleDayForwarder)).unwrap();
     assert_eq!(
@@ -96,7 +96,7 @@ fn store_load_active_day() {
     .build();
 
     let db = TmpDB::new();
-    db.store_day(orig.get_day(), &orig).unwrap();
+    db.store_day(&orig).unwrap();
 
     let loaded = db.load_day(orig.get_day()).unwrap();
     assert_eq!(loaded, Some(orig));
@@ -109,7 +109,7 @@ fn day_collection_testing() -> DBResult<()> {
     let mut original = Vec::new();
     for day in &days {
         let ad = build_test_day(*day);
-        db.store_day(*day, &ad)?;
+        db.store_day(&ad)?;
         original.push(ad);
     }
 
@@ -121,6 +121,7 @@ fn day_collection_testing() -> DBResult<()> {
     let loaded: Result<Vec<_>, _> = to_load.iter().map(|day| db.load_day(*day)).collect();
     let loaded: Vec<ActiveDay> = loaded.unwrap().into_iter().flatten().collect();
     assert_eq!(&loaded[..], &original[2..]);
+
     Ok(())
 }
 

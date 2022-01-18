@@ -1,58 +1,53 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use iced_core::keyboard::{KeyCode, Modifiers};
 use iced_core::{Color, Padding};
 use iced_native::clipboard;
 use iced_wgpu::Text;
 use iced_winit::settings::SettingsWindowConfigurator;
 use iced_winit::widget::{Column, Container};
-use iced_winit::{event, Command, Subscription};
+use iced_winit::Program;
+use iced_winit::{Command, Subscription};
 use iced_winit::{Element, Mode};
-use iced_winit::{Event, Program};
+
+use current_view::CurrentView;
+pub use message::Message;
+use stay_active::StayActive;
+pub use view_id::ViewId;
 
 use crate::conf::{update_settings, SettingsRef};
-use crate::data::{
-    Action, ActiveDay, Day, RecentIssues, RecentIssuesData, TimedAction, WeekDayForwarder,
-};
+use crate::data::{Action, ActiveDay, Day, RecentIssues, RecentIssuesData, TimedAction};
 use crate::db::DB;
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::TimeLimit;
-use crate::ui::book::Book;
-use crate::ui::book_single::BookSingleUI;
-use crate::ui::current_day::{CurrentDayMessage, CurrentDayUI};
-use crate::ui::export::{DayExportMessage, DayExportUi};
-use crate::ui::fast_day_end::FastDayEnd;
-use crate::ui::fast_day_start::FastDayStart;
-use crate::ui::issue_end_edit::IssueEndEdit;
-use crate::ui::issue_start_edit::IssueStartEdit;
+use crate::ui::current_day::CurrentDayMessage;
+use crate::ui::export::DayExportMessage;
 use crate::ui::main_action::MainAction;
-use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
-use crate::Settings;
-
 use crate::ui::message::{DeleteAction, EditAction};
 use crate::ui::recent_issues_view::RecentIssuesView;
 use crate::ui::tab_bar::TabBar;
 use crate::ui::util::v_space;
-pub use message::Message;
-pub use view_id::ViewId;
+use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
+use crate::Settings;
 
 mod book;
 mod book_single;
 mod clip_read;
 mod current_day;
+mod current_view;
 mod entry_edit;
 mod export;
 pub mod fast_day_end;
 pub mod fast_day_start;
 mod issue_end_edit;
 mod issue_start_edit;
+mod keyboard_handler;
 pub mod main_action;
 mod message;
 mod recent_issues_view;
+mod stay_active;
 mod style;
 mod tab_bar;
 mod top_bar;
@@ -61,53 +56,6 @@ mod view_id;
 mod window_configurator;
 mod work_entry_edit;
 mod work_start_edit;
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum StayActive {
-    Default,
-    Yes,
-    No,
-}
-impl Default for StayActive {
-    fn default() -> Self {
-        StayActive::Default
-    }
-}
-
-impl StayActive {
-    pub fn close_app(self, settings: &Settings) -> bool {
-        match self {
-            StayActive::Default => settings.close_on_safe,
-            StayActive::No => true,
-            StayActive::Yes => false,
-        }
-    }
-
-    pub fn apply_settings(self, settings: &Settings) -> Self {
-        match self {
-            StayActive::Default => {
-                if settings.close_on_safe {
-                    StayActive::No
-                } else {
-                    StayActive::Yes
-                }
-            }
-            v => v,
-        }
-    }
-
-    pub fn do_close(self) -> bool {
-        matches!(self, StayActive::No)
-    }
-
-    pub fn on_main_view_store(self) -> Option<Message> {
-        Some(if self.do_close() {
-            Message::Exit
-        } else {
-            Message::Reset
-        })
-    }
-}
 
 pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     let config_settings = main_action.settings.clone();
@@ -225,7 +173,7 @@ impl iced_winit::Program for Quarble {
                 Message::DeleteAction(DeleteAction(_stay_active, action)) => {
                     if let Some(ref mut active_day) = self.active_day {
                         if active_day.actions_mut().remove(&action) {
-                            message = match self.db.store_day(active_day.get_day(), active_day) {
+                            message = match self.db.store_day(active_day) {
                                 Ok(()) => Some(Message::RefreshView),
                                 Err(e) => Some(Message::Error(format!("{:?}", e))),
                             }
@@ -237,7 +185,7 @@ impl iced_winit::Program for Quarble {
                 }
                 Message::StoreAction(stay_active, action) => {
                     if let Some(ref mut active_day) = self.active_day {
-                        if let Some(issue) = active_day.active_issue().cloned() {
+                        if let Some(issue) = action.issue().cloned() {
                             self.recent_view.update(Message::IssueUsed(issue));
                         }
                         active_day.add_action(action);
@@ -369,27 +317,6 @@ impl iced_winit::Program for Quarble {
     }
 }
 
-impl Quarble {}
-
-fn store_active_day(
-    db: &DB,
-    settings: &Settings,
-    stay_active: StayActive,
-    active_day: &ActiveDay,
-    recent_data: RecentIssuesData,
-) -> Option<Message> {
-    let issue_store_msg = match db.store_day(active_day.get_day(), active_day) {
-        Ok(()) => Some(Message::StoreSuccess(stay_active.apply_settings(settings))),
-        Err(e) => Some(Message::Error(format!("{:?}", e))),
-    };
-
-    if let Err(e) = db.store_recent(&recent_data) {
-        eprintln!("Storing recent issues failed: {:?}", e);
-    }
-
-    issue_store_msg
-}
-
 impl iced_winit::Application for Quarble {
     type Flags = MainAction;
 
@@ -435,7 +362,7 @@ impl iced_winit::Application for Quarble {
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
-        iced_winit::subscription::events_with(global_keyboard_handler)
+        iced_winit::subscription::events_with(keyboard_handler::global_keyboard_handler)
     }
 
     fn should_exit(&self) -> bool {
@@ -443,197 +370,23 @@ impl iced_winit::Application for Quarble {
     }
 }
 
-fn global_keyboard_handler(event: Event, status: iced_winit::event::Status) -> Option<Message> {
-    if let event::Status::Captured = status {
-        if let Event::Keyboard(kb) = event {
-            handle_control_keyboard_event(kb)
-        } else {
-            None
-        }
-    } else if let Event::Keyboard(kb) = event {
-        handle_keyboard_event(kb)
-    } else {
-        None
-    }
-}
+fn store_active_day(
+    db: &DB,
+    settings: &Settings,
+    stay_active: StayActive,
+    active_day: &ActiveDay,
+    recent_data: RecentIssuesData,
+) -> Option<Message> {
+    let issue_store_msg = match db.store_day(active_day) {
+        Ok(()) => Some(Message::StoreSuccess(stay_active.apply_settings(settings))),
+        Err(e) => Some(Message::Error(format!("{:?}", e))),
+    };
 
-fn handle_control_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Message> {
-    use iced_winit::keyboard::Event::*;
-    match key_event {
-        KeyPressed {
-            key_code,
-            modifiers,
-        } => {
-            if modifiers.is_empty() {
-                match key_code {
-                    KeyCode::Enter | KeyCode::NumpadEnter => {
-                        Some(Message::SubmitCurrent(StayActive::Default))
-                    }
-                    KeyCode::Escape => Some(Message::Exit),
-                    _ => None,
-                }
-            } else if modifiers == Modifiers::CTRL {
-                handle_control_shortcuts(key_code)
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
-fn handle_control_shortcuts(key_code: KeyCode) -> Option<Message> {
-    match key_code {
-        KeyCode::D => Some(Message::RequestDayChange),
-        KeyCode::I => Some(Message::ChangeView(ViewId::BookSingle)),
-        KeyCode::O => Some(Message::ChangeView(ViewId::FastDayStart)),
-        KeyCode::L => Some(Message::ChangeView(ViewId::FastDayEnd)),
-        KeyCode::S => Some(Message::ChangeView(ViewId::BookIssueStart)),
-        KeyCode::E => Some(Message::ChangeView(ViewId::BookIssueEnd)),
-        KeyCode::X => Some(Message::ChangeView(ViewId::Export)),
-        KeyCode::C => Some(Message::CopyValue),
-        KeyCode::Key1 => Some(Message::ChangeView(ViewId::CurrentDayUi)),
-        KeyCode::Key2 => Some(Message::ChangeView(ViewId::Book)),
-        KeyCode::Enter | KeyCode::NumpadEnter => Some(Message::SubmitCurrent(StayActive::Yes)),
-        KeyCode::Left => Some(Message::ChangeDayRelative(-1, Arc::new(WeekDayForwarder))),
-        KeyCode::Right => Some(Message::ChangeDayRelative(1, Arc::new(WeekDayForwarder))),
-        _ => None,
-    }
-}
-
-fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Message> {
-    use iced_winit::keyboard::Event::*;
-    match key_event {
-        KeyPressed {
-            key_code,
-            modifiers,
-        } => {
-            if modifiers.is_empty() {
-                match key_code {
-                    KeyCode::Escape => Some(Message::Exit),
-                    KeyCode::Tab => Some(Message::Next),
-                    KeyCode::I => Some(Message::ChangeView(ViewId::BookSingle)),
-                    KeyCode::O => Some(Message::ChangeView(ViewId::FastDayStart)),
-                    KeyCode::L => Some(Message::ChangeView(ViewId::FastDayEnd)),
-                    KeyCode::S => Some(Message::ChangeView(ViewId::BookIssueStart)),
-                    KeyCode::E => Some(Message::ChangeView(ViewId::BookIssueEnd)),
-                    KeyCode::X => Some(Message::ChangeView(ViewId::Export)),
-                    KeyCode::Key1 => Some(Message::ChangeView(ViewId::CurrentDayUi)),
-                    KeyCode::Key2 => Some(Message::ChangeView(ViewId::Book)),
-                    KeyCode::Enter | KeyCode::NumpadEnter => {
-                        Some(Message::SubmitCurrent(StayActive::Default))
-                    }
-                    _ => None,
-                }
-            } else if modifiers.shift() {
-                match key_code {
-                    KeyCode::Tab => Some(Message::Previous),
-                    _ => None,
-                }
-            } else if modifiers.control() {
-                match key_code {
-                    KeyCode::Enter | KeyCode::NumpadEnter => {
-                        Some(Message::SubmitCurrent(StayActive::Yes))
-                    }
-                    key_code => handle_control_shortcuts(key_code),
-                }
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
-}
-
-enum CurrentView {
-    Book(Box<Book>),
-    Fds(Box<FastDayStart>),
-    Fde(Box<FastDayEnd>),
-    CdUi(Box<CurrentDayUI>),
-    Bs(Box<BookSingleUI>),
-    Is(Box<IssueStartEdit>),
-    Ie(Box<IssueEndEdit>),
-    Export(Box<DayExportUi>),
-    Exit(Exit),
-}
-
-impl CurrentView {
-    fn view_id(&self) -> ViewId {
-        match &self {
-            CurrentView::Book(_) => ViewId::Book,
-            CurrentView::Fds(_) => ViewId::FastDayStart,
-            CurrentView::Fde(_) => ViewId::FastDayEnd,
-            CurrentView::CdUi(_) => ViewId::CurrentDayUi,
-            CurrentView::Bs(_) => ViewId::BookSingle,
-            CurrentView::Is(_) => ViewId::BookIssueStart,
-            CurrentView::Ie(_) => ViewId::BookIssueEnd,
-            CurrentView::Export(_) => ViewId::Export,
-            CurrentView::Exit(_) => ViewId::Exit,
-        }
+    if let Err(e) = db.store_recent(&recent_data) {
+        eprintln!("Storing recent issues failed: {:?}", e);
     }
 
-    fn create(id: ViewId, settings: SettingsRef, active_day: Option<&ActiveDay>) -> CurrentView {
-        let guard = settings.load();
-
-        match id {
-            ViewId::Book => CurrentView::Book(Book::new(&guard)),
-            ViewId::FastDayStart => {
-                CurrentView::Fds(FastDayStart::for_work_day(settings, active_day))
-            }
-            ViewId::FastDayEnd => CurrentView::Fde(FastDayEnd::for_work_day(settings, active_day)),
-            ViewId::BookSingle => {
-                CurrentView::Bs(BookSingleUI::for_active_day(settings, active_day))
-            }
-            ViewId::BookIssueStart => {
-                CurrentView::Is(IssueStartEdit::for_active_day(settings, active_day))
-            }
-            ViewId::BookIssueEnd => {
-                CurrentView::Ie(IssueEndEdit::for_active_day(settings, active_day))
-            }
-            ViewId::CurrentDayUi => {
-                CurrentView::CdUi(CurrentDayUI::for_active_day(settings, active_day))
-            }
-            ViewId::Export => {
-                CurrentView::Export(DayExportUi::for_active_day(settings, active_day))
-            }
-            ViewId::Exit => CurrentView::Exit(Exit),
-        }
-    }
-
-    fn create_for_edit(
-        value: Action,
-        settings: SettingsRef,
-        active_day: Option<&ActiveDay>,
-    ) -> CurrentView {
-        match value {
-            Action::Work(a) => {
-                let mut ui = BookSingleUI::for_active_day(settings, active_day);
-                ui.entry_to_edit(a);
-                CurrentView::Bs(ui)
-            }
-            Action::WorkStart(a) => {
-                let mut ui = IssueStartEdit::for_active_day(settings, active_day);
-                ui.entry_to_edit(a);
-                CurrentView::Is(ui)
-            }
-            Action::WorkEnd(a) => {
-                let mut ui = IssueEndEdit::for_active_day(settings, active_day);
-                ui.entry_to_edit(a);
-                CurrentView::Ie(ui)
-            }
-            Action::DayStart(a) => {
-                let mut ui = FastDayStart::for_work_day(settings, active_day);
-                ui.entry_to_edit(a);
-                CurrentView::Fds(ui)
-            }
-            Action::DayEnd(a) => {
-                let mut ui = FastDayEnd::for_work_day(settings, active_day);
-                ui.entry_to_edit(a);
-                CurrentView::Fde(ui)
-            }
-            _ => CurrentView::create(ViewId::CurrentDayUi, settings, active_day),
-        }
-    }
+    issue_store_msg
 }
 
 trait MainView {
@@ -644,7 +397,7 @@ trait MainView {
 
 type QElement<'a> = Element<'a, Message, <Quarble as iced_winit::Program>::Renderer>;
 
-struct Exit;
+pub struct Exit;
 
 impl MainView for Exit {
     fn view(&mut self, _settings: &Settings) -> QElement {

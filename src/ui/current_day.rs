@@ -1,15 +1,17 @@
-use crate::conf::{Settings, SettingsRef};
-use crate::data::{Action, ActiveDay, Day};
-use crate::parsing::time::Time;
-use crate::ui::message::{DeleteAction, EditAction};
-use crate::ui::util::h_space;
-use crate::ui::{style, text, StayActive};
-use crate::ui::{MainView, Message, QElement};
 use iced_core::alignment::Horizontal;
 use iced_core::Length;
 use iced_native::widget::{button, text_input};
 use iced_wgpu::TextInput;
 use iced_winit::widget::{scrollable, Column, Container, Row, Scrollable, Space, Text};
+
+use crate::conf::{Settings, SettingsRef};
+use crate::data::{Action, ActiveDay, Day};
+use crate::parsing::time::Time;
+use crate::ui::message::{DeleteAction, EditAction};
+use crate::ui::stay_active::StayActive;
+use crate::ui::util::h_space;
+use crate::ui::{style, text};
+use crate::ui::{MainView, Message, QElement};
 
 #[derive(Clone, Debug)]
 pub enum CurrentDayMessage {

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::data::{Action, Day, DayForwarder, JiraIssue};
 use crate::ui::book_single::BookSingleMessage;
 use crate::ui::current_day::CurrentDayMessage;
@@ -6,8 +8,8 @@ use crate::ui::fast_day_end::FastDayEndMessage;
 use crate::ui::fast_day_start::FastDayStartMessage;
 use crate::ui::issue_end_edit::IssueEndMessage;
 use crate::ui::issue_start_edit::IssueStartMessage;
-use crate::ui::{StayActive, ViewId};
-use std::sync::Arc;
+use crate::ui::stay_active::StayActive;
+use crate::ui::ViewId;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -87,8 +89,9 @@ struct ModifyAction {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use std::mem::size_of;
+
+    use super::*;
 
     enum X {
         MA(ModifyAction),

@@ -6,11 +6,10 @@ use crate::data::{Action, ActiveDay, JiraIssue, WorkEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::IssueParsed;
+use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{
-    day_info_message, style, text, time_info, MainView, Message, QElement, StayActive,
-};
+use crate::ui::{day_info_message, style, text, time_info, MainView, Message, QElement};
 use crate::Settings;
 
 #[derive(Clone, Debug)]
@@ -159,7 +158,8 @@ impl MainView for IssueEndEdit {
 mod test {
     use crate::conf::into_settings_ref;
     use crate::ui::issue_end_edit::{IssueEndEdit, IssueEndMessage};
-    use crate::ui::{MainView, Message, StayActive};
+    use crate::ui::stay_active::StayActive;
+    use crate::ui::{MainView, Message};
     use crate::util::StaticTimeline;
     use crate::Settings;
 

@@ -1,11 +1,13 @@
+use std::fmt::Debug;
 use std::fs::{DirEntry, File, OpenOptions};
 use std::io::{BufReader, BufWriter, ErrorKind};
 use std::ops::RangeBounds;
 use std::path::{Path, PathBuf};
 
+use thiserror::Error;
+
 use crate::data::{ActiveDay, Day, RecentIssuesData};
 use crate::parsing::time::Time;
-use thiserror::Error;
 
 #[cfg(test)]
 mod test;
@@ -100,7 +102,7 @@ impl DB {
         let dirs =
             std::fs::read_dir(&self.root).map_err(|e| DBErr::NotADirectory(e.to_string()))?;
 
-        let result = dirs
+        let mut result: Vec<Day> = dirs
             .filter_map(|e| e.ok())
             .filter(is_file)
             .filter_map(|e| e.file_name().into_string().ok())
@@ -108,11 +110,13 @@ impl DB {
             .filter(|d| range.contains(d))
             .collect();
 
+        result.sort();
+
         Ok(result)
     }
 
-    pub fn store_day(&self, day: Day, work_day: &ActiveDay) -> DBResult<()> {
-        let to_store = self.work_day_path(day);
+    pub fn store_day(&self, work_day: &ActiveDay) -> DBResult<()> {
+        let to_store = self.work_day_path(work_day.get_day());
 
         let file = Self::open_for_write(&to_store)?;
 
@@ -120,7 +124,6 @@ impl DB {
         serde_json::to_writer_pretty(write, work_day)
             .map_err(|_| DBErr::FailedToWrite(to_store.clone()))?;
 
-        eprintln!("Stored: {:?}", work_day);
         Ok(())
     }
 

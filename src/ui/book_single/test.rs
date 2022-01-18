@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+use std::collections::BTreeMap;
+
 use crate::conf::into_settings_ref;
 use crate::data::{JiraIssue, Work};
 use crate::parsing::parse_result::ParseResult;
@@ -7,10 +9,10 @@ use crate::parsing::time::Time;
 use crate::parsing::{parse_issue_clipboard, IssueParser};
 use crate::ui::book_single::{BookSingleMessage, BookSingleUI};
 use crate::ui::clip_read::ClipRead;
-use crate::ui::{MainView, Message, StayActive};
+use crate::ui::stay_active::StayActive;
+use crate::ui::{MainView, Message};
 use crate::util::StaticTimeline;
 use crate::Settings;
-use std::collections::BTreeMap;
 
 fn meeting() -> JiraIssue {
     JiraIssue {
