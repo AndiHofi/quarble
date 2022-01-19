@@ -334,7 +334,7 @@ impl iced_winit::Application for Quarble {
             CurrentView::create(flags.initial_view, settings.clone(), active_day.as_ref());
 
         let recent = db.load_recent().unwrap_or_default();
-        let recent_issues = RecentIssues::new(recent, settings.load().timeline.clone(), 9);
+        let recent_issues = RecentIssues::new(recent, settings.clone(), 9);
         let recent_view = RecentIssuesView::create(recent_issues);
 
         let mut quarble = Quarble {

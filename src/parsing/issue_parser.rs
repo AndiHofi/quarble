@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
+
+use lazy_static::lazy_static;
+use regex::{Captures, Regex};
+
 use crate::data::JiraIssue;
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::rest;
-use lazy_static::lazy_static;
-use regex::{Captures, Regex};
-use std::collections::BTreeMap;
 
 lazy_static! {
     static ref ISSUE_SHORTCUT: Regex = Regex::new(r"^(?P<abbr>[a-zA-Z])\b").unwrap();
@@ -105,10 +107,11 @@ fn matching<'a, 'b>(c: &'b Captures<'a>) -> &'a str {
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeMap;
+
     use crate::data::JiraIssue;
     use crate::parsing::issue_parser::{IssueParsed, IssueParser};
     use crate::parsing::parse_result::ParseResult;
-    use std::collections::BTreeMap;
 
     #[test]
     fn parse_shortcut() {

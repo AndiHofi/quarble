@@ -3,7 +3,7 @@
 use crate::data::Day;
 use crate::parsing::time::Time;
 use std::fmt::Debug;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 #[deprecated]
@@ -16,7 +16,7 @@ pub fn time_now() -> chrono::NaiveTime {
     DefaultTimeline.now().time()
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct DefaultTimeline;
 
 impl TimelineProvider for DefaultTimeline {
@@ -25,18 +25,25 @@ impl TimelineProvider for DefaultTimeline {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct StaticTimeline(chrono::NaiveDateTime);
+#[derive(Debug)]
+pub struct StaticTimeline(Arc<Mutex<chrono::NaiveDateTime>>);
 
 impl StaticTimeline {
     pub fn parse(s: &str) -> StaticTimeline {
-        StaticTimeline(chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap())
+        StaticTimeline(Arc::new(Mutex::new(
+            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").unwrap(),
+        )))
+    }
+
+    pub fn advance(&self) {
+        let mut guard = self.0.lock().unwrap();
+        *guard += chrono::Duration::minutes(1);
     }
 }
 
 impl TimelineProvider for StaticTimeline {
     fn now(&self) -> chrono::NaiveDateTime {
-        self.0
+        *self.0.lock().unwrap()
     }
 }
 
