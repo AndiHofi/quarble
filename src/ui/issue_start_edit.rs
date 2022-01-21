@@ -5,7 +5,7 @@ use crate::conf::SettingsRef;
 use crate::data::{Action, ActiveDay, JiraIssue, WorkStart};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
-use crate::parsing::{parse_issue_clipboard, IssueParsed};
+use crate::parsing::{parse_issue_clipboard, IssueParsed, IssueParser};
 use crate::ui::clip_read::ClipRead;
 use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;

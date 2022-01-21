@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 use lazy_static::lazy_static;
 use regex::{Captures, Regex};
 
-use crate::data::JiraIssue;
+use crate::data::{JiraIssue, RecentIssues};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::rest;
 
@@ -11,14 +12,14 @@ lazy_static! {
     static ref ISSUE_SHORTCUT: Regex = Regex::new(r"^(?P<abbr>[a-zA-Z])\b").unwrap();
     static ref ISSUE: Regex = Regex::new(r"^(?P<id>([a-zA-Z]+-[0-9]+))").unwrap();
     static ref ISSUE_CLIPBOARD: Regex =
-        Regex::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]+))(?:(?:\W)+(?P<comment>.*))?").unwrap();
+        Regex::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]{0,3}))(?:(?:\W)+(?P<comment>.*))?").unwrap();
     static ref ISSUE_DESCRIPTION: Regex =
         Regex::new(r"^(?P<id>([a-zA-Z]+-[0-9]+))(?:\W+)(?P<comment>[^#]+)#").unwrap();
+    static ref RECENT_ISSUE: Regex = Regex::new(r"^r(?P<recent>[1-9][0-9]*)").unwrap();
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct IssueParser {
-    shortcuts: BTreeMap<char, JiraIssue>,
+pub trait IssueParser {
+    fn parse_task<'a>(&self, input: &'a str) -> IssueParsed<'a>;
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -28,7 +29,12 @@ pub struct IssueParsed<'a> {
     pub rest: &'a str,
 }
 
-impl IssueParser {
+#[derive(Clone, Debug, Default)]
+pub struct JiraIssueParser {
+    shortcuts: BTreeMap<char, JiraIssue>,
+}
+
+impl JiraIssueParser {
     pub fn new(shortcuts: BTreeMap<char, JiraIssue>) -> Self {
         Self { shortcuts }
     }
@@ -36,8 +42,10 @@ impl IssueParser {
     pub fn shortcuts(&self) -> &BTreeMap<char, JiraIssue> {
         &self.shortcuts
     }
+}
 
-    pub fn parse_task<'a>(&self, input: &'a str) -> IssueParsed<'a> {
+impl IssueParser for JiraIssueParser {
+    fn parse_task<'a>(&self, input: &'a str) -> IssueParsed<'a> {
         if let Some(c) = ISSUE_DESCRIPTION.captures(input) {
             let id = c.name("id").unwrap().as_str();
             let comment = c.name("comment").unwrap().as_str();
@@ -90,6 +98,33 @@ impl IssueParser {
     }
 }
 
+pub struct IssueParserWithRecent<'a> {
+    delegate: &'a JiraIssueParser,
+    recent: &'a RecentIssues,
+}
+
+impl<'a> IssueParserWithRecent<'a> {
+    pub fn new(delegate: &'a JiraIssueParser, recent: &'a RecentIssues) -> Self {
+        Self { delegate, recent }
+    }
+}
+
+impl<'a> IssueParser for IssueParserWithRecent<'a> {
+    fn parse_task<'b>(&self, input: &'b str) -> IssueParsed<'b> {
+        if let Some(c) = RECENT_ISSUE.captures(input) {
+            let index = usize::from_str(c.name("recent").unwrap().as_str()).unwrap();
+            let recent = self.recent.find_recent(index - 1).map(|r| r.issue.clone());
+            IssueParsed {
+                r: recent.ok_or(()).into(),
+                input,
+                rest: "",
+            }
+        } else {
+            self.delegate.parse_task(input)
+        }
+    }
+}
+
 pub fn parse_issue_clipboard(input: &str) -> Option<JiraIssue> {
     let c = ISSUE_CLIPBOARD.captures(input)?;
     let id = c.name("id")?;
@@ -110,7 +145,7 @@ mod test {
     use std::collections::BTreeMap;
 
     use crate::data::JiraIssue;
-    use crate::parsing::issue_parser::{IssueParsed, IssueParser};
+    use crate::parsing::issue_parser::{IssueParsed, IssueParser, JiraIssueParser};
     use crate::parsing::parse_result::ParseResult;
 
     #[test]
@@ -229,8 +264,8 @@ mod test {
         }
     }
 
-    fn new_parser() -> IssueParser {
-        IssueParser {
+    fn new_parser() -> JiraIssueParser {
+        JiraIssueParser {
             shortcuts: BTreeMap::from_iter(
                 [
                     ('a', JiraIssue::create("A-1").unwrap()),

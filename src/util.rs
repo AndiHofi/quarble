@@ -2,7 +2,9 @@
 
 use crate::data::Day;
 use crate::parsing::time::Time;
+use arc_swap::ArcSwap;
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -65,3 +67,21 @@ pub trait TimelineProvider: Debug + Send + Sync {
 }
 
 pub type Timeline = Arc<dyn TimelineProvider>;
+
+pub fn update_arcswap<A, F, D>(orig: &D, f: F)
+where
+    A: Clone,
+    F: FnOnce(&mut A),
+    D: Deref<Target = ArcSwap<A>>,
+{
+    let target = orig.deref();
+    let mut updating = (**target.load()).clone();
+    f(&mut updating);
+    target.store(Arc::new(updating))
+}
+
+impl From<StaticTimeline> for Timeline {
+    fn from(t: StaticTimeline) -> Self {
+        Arc::new(t)
+    }
+}

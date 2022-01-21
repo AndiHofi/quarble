@@ -5,8 +5,8 @@ pub use day_normalizer::{BreaksInfo, NormalizedDay, Normalizer};
 pub use exporter::TimeCockpitExporter;
 pub use jira_issue::JiraIssue;
 pub use location::Location;
+pub use recent_issues::{RecentIssue, RecentIssues, RecentIssuesData, RecentIssuesRef};
 pub use work::{Work, WorkEnd, WorkEvent, WorkStart};
-pub use recent_issues::{RecentIssues, RecentIssue, RecentIssuesData};
 
 mod action;
 mod active_day;

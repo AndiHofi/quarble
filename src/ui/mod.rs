@@ -17,7 +17,9 @@ use stay_active::StayActive;
 pub use view_id::ViewId;
 
 use crate::conf::{update_settings, SettingsRef};
-use crate::data::{Action, ActiveDay, Day, RecentIssues, RecentIssuesData, TimedAction};
+use crate::data::{
+    Action, ActiveDay, Day, RecentIssues, RecentIssuesData, RecentIssuesRef, TimedAction,
+};
 use crate::db::DB;
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
@@ -91,6 +93,7 @@ pub struct Quarble {
     active_day_dirty: bool,
     initial_view: ViewId,
     tab_bar: TabBar,
+    recent_issues: RecentIssuesRef,
     recent_view: RecentIssuesView,
 }
 
@@ -118,6 +121,7 @@ impl iced_winit::Program for Quarble {
                         self.current_view = CurrentView::create(
                             ViewId::CurrentDayUi,
                             self.settings.clone(),
+                            self.recent_issues.clone(),
                             self.active_day.as_ref(),
                         );
                         message = Some(Message::Cd(CurrentDayMessage::StartDayChange));
@@ -144,18 +148,22 @@ impl iced_winit::Program for Quarble {
                 Message::ChangeView(view_id) => {
                     if self.current_view.view_id() != view_id {
                         self.tab_bar.set_active_view(view_id);
+                        self.recent_view.refresh();
                         self.current_view = CurrentView::create(
                             view_id,
                             self.settings.clone(),
+                            self.recent_issues.clone(),
                             self.active_day.as_ref(),
                         );
                     }
                 }
                 Message::RefreshView => {
                     self.tab_bar.set_active_view(self.current_view.view_id());
+                    self.recent_view.refresh();
                     self.current_view = CurrentView::create(
                         self.current_view.view_id(),
                         self.settings.clone(),
+                        self.recent_issues.clone(),
                         self.active_day.as_ref(),
                     );
                 }
@@ -163,9 +171,11 @@ impl iced_winit::Program for Quarble {
                     message = Some(Message::ChangeView(self.initial_view));
                 }
                 Message::EditAction(EditAction(action)) => {
+                    self.recent_view.refresh();
                     self.current_view = CurrentView::create_for_edit(
                         *action,
                         self.settings.clone(),
+                        self.recent_issues.clone(),
                         self.active_day.as_ref(),
                     );
                     self.tab_bar.set_active_view(self.current_view.view_id());
@@ -185,8 +195,9 @@ impl iced_winit::Program for Quarble {
                 }
                 Message::StoreAction(stay_active, action) => {
                     if let Some(ref mut active_day) = self.active_day {
-                        if let Some(issue) = action.issue().cloned() {
-                            self.recent_view.update(Message::IssueUsed(issue));
+                        if let Some(issue) = action.issue() {
+                            self.recent_issues
+                                .issue_used_with_comment(issue, action.description())
                         }
                         active_day.add_action(action);
                         message = store_active_day(
@@ -206,8 +217,9 @@ impl iced_winit::Program for Quarble {
                     if let Some(ref mut active_day) = self.active_day {
                         let actions = active_day.actions_mut();
                         if actions.remove(&orig) {
-                            if let Some(issue) = update.issue().cloned() {
-                                self.recent_view.update(Message::IssueUsed(issue));
+                            if let Some(issue) = update.issue() {
+                                self.recent_issues
+                                    .issue_used_with_comment(issue, update.description());
                             }
                             actions.insert(*update);
 
@@ -234,6 +246,7 @@ impl iced_winit::Program for Quarble {
                         self.current_view = CurrentView::create(
                             ViewId::Export,
                             self.settings.clone(),
+                            self.recent_issues.clone(),
                             self.active_day.as_ref(),
                         );
                         message = Some(Message::Export(DayExportMessage::TriggerExport));
@@ -330,12 +343,18 @@ impl iced_winit::Application for Quarble {
             Err(e) => (Some(Message::Error(format!("{:?}", e))), None),
         };
 
-        let current_view =
-            CurrentView::create(flags.initial_view, settings.clone(), active_day.as_ref());
-
         let recent = db.load_recent().unwrap_or_default();
-        let recent_issues = RecentIssues::new(recent, settings.clone(), 9);
-        let recent_view = RecentIssuesView::create(recent_issues);
+        let recent_issues = RecentIssues::new(recent, settings.clone());
+        let recent_issues = RecentIssuesRef::new(recent_issues);
+
+        let current_view = CurrentView::create(
+            flags.initial_view,
+            settings.clone(),
+            recent_issues.clone(),
+            active_day.as_ref(),
+        );
+
+        let recent_view = RecentIssuesView::create(recent_issues.clone());
 
         let mut quarble = Quarble {
             current_view,
@@ -346,6 +365,7 @@ impl iced_winit::Application for Quarble {
             initial_view: flags.initial_view,
             tab_bar: TabBar::new(flags.initial_view),
             recent_view,
+            recent_issues,
         };
 
         let command = if let Some(initial_message) = initial_message {

@@ -1,5 +1,5 @@
 use crate::conf::SettingsRef;
-use crate::data::{Action, ActiveDay};
+use crate::data::{Action, ActiveDay, RecentIssuesRef};
 use crate::ui::book::Book;
 use crate::ui::book_single::BookSingleUI;
 use crate::ui::current_day::CurrentDayUI;
@@ -40,6 +40,7 @@ impl CurrentView {
     pub fn create(
         id: ViewId,
         settings: SettingsRef,
+        recent_issues: RecentIssuesRef,
         active_day: Option<&ActiveDay>,
     ) -> CurrentView {
         let guard = settings.load();
@@ -51,7 +52,7 @@ impl CurrentView {
             }
             ViewId::FastDayEnd => CurrentView::Fde(FastDayEnd::for_work_day(settings, active_day)),
             ViewId::BookSingle => {
-                CurrentView::Bs(BookSingleUI::for_active_day(settings, active_day))
+                CurrentView::Bs(BookSingleUI::for_active_day(settings, recent_issues, active_day))
             }
             ViewId::BookIssueStart => {
                 CurrentView::Is(IssueStartEdit::for_active_day(settings, active_day))
@@ -72,11 +73,12 @@ impl CurrentView {
     pub fn create_for_edit(
         value: Action,
         settings: SettingsRef,
+        recent_issues: RecentIssuesRef,
         active_day: Option<&ActiveDay>,
     ) -> CurrentView {
         match value {
             Action::Work(a) => {
-                let mut ui = BookSingleUI::for_active_day(settings, active_day);
+                let mut ui = BookSingleUI::for_active_day(settings, recent_issues, active_day);
                 ui.entry_to_edit(a);
                 CurrentView::Bs(ui)
             }
@@ -100,7 +102,7 @@ impl CurrentView {
                 ui.entry_to_edit(a);
                 CurrentView::Fde(ui)
             }
-            _ => CurrentView::create(ViewId::CurrentDayUi, settings, active_day),
+            _ => CurrentView::create(ViewId::CurrentDayUi, settings, recent_issues, active_day),
         }
     }
 }

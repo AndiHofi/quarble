@@ -33,7 +33,6 @@ pub enum Message {
     ChangeDayRelative(i64, Arc<dyn DayForwarder>),
     ClipboardValue(Option<String>),
     IssueInput(String),
-    IssueUsed(JiraIssue),
     UpdateCloseOnSafe(bool),
     UpdateStart {
         id: usize,

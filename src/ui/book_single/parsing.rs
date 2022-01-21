@@ -1,13 +1,14 @@
-use crate::data::JiraIssue;
+use lazy_static::lazy_static;
+
 use crate::data::Work;
+use crate::data::{JiraIssue, RecentIssues};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_relative::TimeRelative;
-use crate::parsing::{parse_issue_clipboard, IssueParsed, IssueParser};
+use crate::parsing::{parse_issue_clipboard, IssueParsed, IssueParser, IssueParserWithRecent};
 use crate::ui::clip_read::ClipRead;
 use crate::util::Timeline;
 use crate::Settings;
-use lazy_static::lazy_static;
 
 lazy_static! {
     static ref SEPARATOR: regex::Regex = regex::RegexBuilder::new(r"[ \t\n\r]+").build().unwrap();
@@ -28,8 +29,13 @@ impl WorkBuilder {
         matches!(self.clipboard_reading, ClipRead::DoRead)
     }
 
-    pub(super) fn parse_input(&mut self, settings: &Settings, text: &str) {
-        parse(self, settings, text)
+    pub(super) fn parse_input(
+        &mut self,
+        settings: &Settings,
+        recent_issues: &RecentIssues,
+        text: &str,
+    ) {
+        parse(self, settings, recent_issues, text)
     }
 
     pub(super) fn apply_clipboard(&mut self, value: Option<String>) {
@@ -91,7 +97,7 @@ impl WorkBuilder {
     }
 }
 
-fn parse(b: &mut WorkBuilder, settings: &Settings, input: &str) {
+fn parse(b: &mut WorkBuilder, settings: &Settings, recent_issues: &RecentIssues, input: &str) {
     enum TorD {
         Time(Time),
         Dur(TimeRelative),
@@ -158,19 +164,26 @@ fn parse(b: &mut WorkBuilder, settings: &Settings, input: &str) {
         _ => (ParseResult::Invalid(()), ParseResult::Invalid(())),
     };
 
+    let issue_parser = IssueParserWithRecent::new(&settings.issue_parser, recent_issues);
+
     let (
         IssueParsed {
             r: issue, input, ..
         },
         comment,
-    ) = parse_from_issue(&settings.issue_parser, rest.trim_start());
+    ) = parse_from_issue(&issue_parser, rest.trim_start());
 
     let old_issue = std::mem::take(&mut b.task);
 
     b.start = start;
     b.end = end;
+    b.msg = comment
+        .or(issue
+            .as_ref()
+            .get()
+            .and_then(|i| i.default_action.as_deref()))
+        .map(|s| s.to_owned());
     b.task = issue;
-    b.msg = comment.map(|s| s.to_owned());
 
     if matches!(b.task, ParseResult::None) {
         if input != b.last_task_input.as_str() {
@@ -185,7 +198,7 @@ fn parse(b: &mut WorkBuilder, settings: &Settings, input: &str) {
 }
 
 fn parse_from_issue<'a, 'b>(
-    ip: &'b IssueParser,
+    ip: &'b impl IssueParser,
     input: &'a str,
 ) -> (IssueParsed<'a>, Option<&'a str>) {
     let issue = ip.parse_task(input);

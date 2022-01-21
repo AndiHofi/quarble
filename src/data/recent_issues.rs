@@ -1,8 +1,14 @@
+use arc_swap::{ArcSwap, Guard};
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
+use std::fmt::{Debug, Formatter};
 use std::num::NonZeroUsize;
+use std::ops::Deref;
+use std::sync::Arc;
 
 use crate::conf::SettingsRef;
 use crate::data::JiraIssue;
+use crate::util::update_arcswap;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct RecentIssuesData {
@@ -12,6 +18,38 @@ pub struct RecentIssuesData {
 impl RecentIssuesData {
     pub fn new() -> Self {
         Self { issues: Vec::new() }
+    }
+}
+
+#[derive(Clone)]
+pub struct RecentIssuesRef(Arc<ArcSwap<RecentIssues>>);
+
+impl Debug for RecentIssuesRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let d = self.0.load();
+        <RecentIssues as Debug>::fmt(d.deref().deref(), f)
+    }
+}
+
+impl RecentIssuesRef {
+    pub fn new(inner: RecentIssues) -> Self {
+        Self(Arc::new(ArcSwap::new(Arc::new(inner))))
+    }
+
+    pub fn empty(settings: SettingsRef) -> Self {
+        Self::new(RecentIssues::empty(settings))
+    }
+
+    pub fn issue_used(&self, issue: &JiraIssue) {
+        update_arcswap(&self.0, |r: &mut RecentIssues| r.issue_used(issue));
+    }
+    
+    pub fn issue_used_with_comment(&self, issue: &JiraIssue, comment: Option<&str>) {
+        update_arcswap(&self.0, |r: &mut RecentIssues| r.issue_used_with_comment(issue, comment))
+    }
+
+    pub fn borrow(&self) -> Guard<Arc<RecentIssues>> {
+        self.0.load()
     }
 }
 
@@ -29,11 +67,12 @@ pub struct RecentIssues {
 }
 
 impl RecentIssues {
-    pub fn empty(settings: SettingsRef, max_len: usize) -> Self {
-        Self::new(RecentIssuesData::new(), settings, max_len)
+    pub fn empty(settings: SettingsRef) -> Self {
+        Self::new(RecentIssuesData::new(), settings)
     }
 
-    pub fn new(issues: RecentIssuesData, settings: SettingsRef, max_len: usize) -> Self {
+    pub fn new(issues: RecentIssuesData, settings: SettingsRef) -> Self {
+        let max_len = settings.load().max_recent_issues;
         let max_len = NonZeroUsize::new(if max_len < 1 { 1 } else { max_len }).unwrap();
         let guard = settings.load();
         let shortcuts = guard.issue_parser.shortcuts();
@@ -81,6 +120,17 @@ impl RecentIssues {
                     last_used,
                 },
             )
+        }
+    }
+
+    pub fn issue_used_with_comment(&mut self, issue: &JiraIssue, comment: Option<&str>) {
+        match comment {
+            Some(c) => {
+                let mut issue = issue.clone();
+                issue.default_action = Some(c.to_string());
+                self.issue_used(&issue)
+            }
+            None => self.issue_used(issue)
         }
     }
 
@@ -156,7 +206,7 @@ mod test {
     use crate::conf::{into_settings_ref, Settings};
     use crate::data::recent_issues::vec_move_to_front;
     use crate::data::{JiraIssue, RecentIssue, RecentIssues, RecentIssuesData};
-    use crate::parsing::IssueParser;
+    use crate::parsing::JiraIssueParser;
     use crate::util::{StaticTimeline, TimelineProvider};
 
     #[test]
@@ -175,6 +225,7 @@ mod test {
         let timeline = Arc::new(StaticTimeline::parse("2022-01-10 12:00"));
         let settings = into_settings_ref(Settings {
             timeline: timeline.clone(),
+            max_recent_issues: 3,
             ..Default::default()
         });
 
@@ -191,7 +242,6 @@ mod test {
                     .collect(),
             },
             settings,
-            3,
         );
 
         assert_eq!(recent.list_recent(), vec![recent4, recent3, recent2]);
@@ -201,11 +251,12 @@ mod test {
     fn ignores_shortcuts() {
         let timeline = Arc::new(StaticTimeline::parse("2022-01-10 12:00"));
         let settings = Settings {
-            issue_parser: IssueParser::new(BTreeMap::from_iter([
+            issue_parser: JiraIssueParser::new(BTreeMap::from_iter([
                 ('a', issue("a1")),
                 ('b', issue("a2")),
             ])),
             timeline: timeline.clone(),
+            max_recent_issues: 3,
             ..Default::default()
         };
 
@@ -224,7 +275,6 @@ mod test {
                     .collect(),
             },
             settings,
-            3,
         );
 
         assert_eq!(recent.list_recent(), vec![recent2.clone(), recent1.clone()]);
@@ -244,10 +294,11 @@ mod test {
         let timeline = Arc::new(StaticTimeline::parse("2022-01-10 12:00"));
         let settings = into_settings_ref(Settings {
             timeline: timeline.clone(),
+            max_recent_issues: 5,
             ..Default::default()
         });
 
-        let mut recent = RecentIssues::new(RecentIssuesData::default(), settings, 5);
+        let mut recent = RecentIssues::new(RecentIssuesData::default(), settings);
 
         let recent1 = next_recent(&timeline, "i1");
         recent.issue_used(&recent1.issue);

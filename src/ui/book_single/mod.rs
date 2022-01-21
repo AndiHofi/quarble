@@ -5,7 +5,7 @@ use iced_winit::widget::{text_input, Column};
 use parsing::WorkBuilder;
 
 use crate::conf::{Settings, SettingsRef};
-use crate::data::{Action, ActiveDay, JiraIssue, Work};
+use crate::data::{Action, ActiveDay, JiraIssue, RecentIssuesRef, Work};
 use crate::parsing::parse_result::ParseResult;
 use crate::ui::clip_read::ClipRead;
 use crate::ui::stay_active::StayActive;
@@ -28,14 +28,17 @@ pub struct BookSingleUI {
     builder: WorkBuilder,
     settings: SettingsRef,
     orig: Option<Work>,
+    recent_issues: RecentIssuesRef,
 }
 
 impl BookSingleUI {
     fn parse_input(&mut self, text: &str) {
-        self.builder.parse_input(&self.settings.load(), text)
+        let recent = self.recent_issues.borrow();
+        self.builder
+            .parse_input(&self.settings.load(), &recent, text)
     }
 
-    pub fn for_active_day(settings: SettingsRef, active_day: Option<&ActiveDay>) -> Box<Self> {
+    pub fn for_active_day(settings: SettingsRef, recent_issues: RecentIssuesRef, active_day: Option<&ActiveDay>) -> Box<Self> {
         Box::new(Self {
             top_bar: TopBar {
                 title: "Book issue:",
@@ -49,6 +52,7 @@ impl BookSingleUI {
             builder: Default::default(),
             settings,
             orig: None,
+            recent_issues,
         })
     }
 

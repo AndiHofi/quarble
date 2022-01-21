@@ -1,19 +1,21 @@
-use crate::data::{RecentIssue, RecentIssues, RecentIssuesData};
-use crate::ui::util::h_space;
-use crate::ui::{style, text, MainView, Message, QElement};
-use crate::Settings;
 use iced_core::Length;
 use iced_native::widget::{Column, Row};
 
+use crate::data::{RecentIssue, RecentIssues, RecentIssuesData, RecentIssuesRef};
+use crate::ui::util::h_space;
+use crate::ui::{style, text, MainView, Message, QElement};
+use crate::Settings;
+
 pub struct RecentIssuesView {
-    recent: RecentIssues,
+    recent: RecentIssuesRef,
     filter: String,
     visible: Vec<RecentIssue>,
 }
 
 impl RecentIssuesView {
-    pub fn create(r: RecentIssues) -> Self {
-        let visible: Vec<_> = r.list_recent().to_vec();
+    pub fn create(r: RecentIssuesRef) -> Self {
+        let guard = r.borrow();
+        let visible: Vec<_> = guard.list_recent().to_vec();
         RecentIssuesView {
             recent: r,
             filter: String::new(),
@@ -23,7 +25,34 @@ impl RecentIssuesView {
 
     pub fn export_data(&self) -> RecentIssuesData {
         RecentIssuesData {
-            issues: self.recent.list_recent().to_vec(),
+            issues: self.recent.borrow().list_recent().to_vec(),
+        }
+    }
+
+    pub fn refresh(&mut self) {
+        self.update_filter(String::new())
+    }
+
+    fn update_filter(&mut self, input: String) {
+        self.filter = input;
+        let guard = self.recent.borrow();
+        if self.filter.trim().is_empty() {
+            self.visible = guard.list_recent().to_vec();
+        } else {
+            let input = self.filter.as_str();
+            self.visible = guard
+                .list_recent()
+                .iter()
+                .filter(|e| {
+                    e.issue.ident.contains(input)
+                        || e.issue
+                            .description
+                            .as_deref()
+                            .filter(|d| d.contains(input))
+                            .is_some()
+                })
+                .cloned()
+                .collect();
         }
     }
 }
@@ -50,9 +79,6 @@ impl MainView for RecentIssuesView {
         match msg {
             Message::IssueInput(input) => {
                 self.filter = input;
-            }
-            Message::IssueUsed(issue) => {
-                self.recent.issue_used(&issue);
             }
             _ => (),
         };

@@ -1,13 +1,20 @@
-use crate::data::{Day, JiraIssue};
-use crate::parsing::time::Time;
-use crate::parsing::IssueParser;
-use crate::util::{DefaultTimeline, Timeline, TimelineProvider};
-use arc_swap::ArcSwap;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
+
+use crate::data::{Day, JiraIssue};
+use crate::parsing::time::Time;
+use crate::parsing::JiraIssueParser;
+use crate::util::{update_arcswap, DefaultTimeline, Timeline, TimelineProvider};
+
+/// Current application state. Shared across all views and widgets
+///
+/// Typically behind an ArcSwap and therefore immutable
+///
+/// Use [update_settings] for changing settings
 #[derive(Clone, Debug)]
 pub struct Settings {
     pub settings_location: Option<PathBuf>,
@@ -16,10 +23,11 @@ pub struct Settings {
     pub write_settings: bool,
     pub active_date: Day,
     pub timeline: Timeline,
-    pub issue_parser: IssueParser,
+    pub issue_parser: JiraIssueParser,
     pub breaks: BreaksConfig,
     pub debug: bool,
     pub close_on_safe: bool,
+    pub max_recent_issues: usize,
 }
 
 impl Settings {
@@ -33,8 +41,9 @@ impl Settings {
             Self {
                 db_dir: s.db_dir.clone(),
                 resolution: chrono::Duration::minutes(s.resolution_minutes as i64),
-                issue_parser: IssueParser::new(s.issue_shortcuts),
+                issue_parser: JiraIssueParser::new(s.issue_shortcuts),
                 breaks: s.breaks,
+                max_recent_issues: s.max_recent_issues as usize,
                 ..Self::default()
             }
         } else {
@@ -49,10 +58,11 @@ pub fn into_settings_ref(s: Settings) -> SettingsRef {
     Rc::new(ArcSwap::new(Arc::new(s)))
 }
 
+/// Update current [Settings]
+///
+/// Is not thread-safe and does protect against lost updates
 pub fn update_settings(settings: &SettingsRef, f: impl FnOnce(&mut Settings)) {
-    let mut updating = (**settings.load()).clone();
-    f(&mut updating);
-    settings.store(Arc::new(updating))
+    update_arcswap(settings, f)
 }
 
 impl Default for Settings {
@@ -65,10 +75,11 @@ impl Default for Settings {
             write_settings: false,
             active_date: timeline.today(),
             timeline,
-            issue_parser: IssueParser::default(),
+            issue_parser: JiraIssueParser::default(),
             breaks: Default::default(),
             debug: false,
             close_on_safe: true,
+            max_recent_issues: 10,
         }
     }
 }
@@ -82,6 +93,12 @@ pub struct SettingsSer {
     pub issue_shortcuts: BTreeMap<char, JiraIssue>,
     #[serde(default)]
     pub breaks: BreaksConfig,
+    #[serde(default = "default_max_recent_issues")]
+    pub max_recent_issues: u32,
+}
+
+fn default_max_recent_issues() -> u32 {
+    10
 }
 
 impl SettingsSer {
@@ -91,6 +108,7 @@ impl SettingsSer {
             resolution_minutes: settings.resolution.num_minutes() as u32,
             issue_shortcuts: settings.issue_parser.shortcuts().clone(),
             breaks: settings.breaks.clone(),
+            max_recent_issues: settings.max_recent_issues as u32,
         }
     }
 }
@@ -104,11 +122,12 @@ pub struct BreaksConfig {
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeMap;
+    use std::path::Path;
+
     use crate::conf::{BreaksConfig, SettingsSer};
     use crate::data::JiraIssue;
     use crate::parsing::time::Time;
-    use std::collections::BTreeMap;
-    use std::path::Path;
 
     #[test]
     fn test_serialize_settings() {
@@ -149,6 +168,7 @@ mod test {
                 min_work_time_minutes: 360,
                 default_break: (Time::hm(11, 30), Time::hm(12, 15)),
             },
+            max_recent_issues: 15,
         };
 
         let pretty = serde_json::to_string_pretty(&orig).unwrap();

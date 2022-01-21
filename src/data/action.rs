@@ -60,6 +60,15 @@ impl Action {
         }
     }
 
+    pub fn description(&self) -> Option<&str> {
+        match self {
+            Action::Work(Work { description, .. }) => Some(description),
+            Action::WorkEvent(WorkEvent { description, .. }) => Some(description),
+            Action::WorkStart(WorkStart { description, .. }) => Some(description),
+            _ => None,
+        }
+    }
+
     pub fn issue_id(&self) -> Option<&str> {
         self.issue().map(|i| i.ident.as_str())
     }
