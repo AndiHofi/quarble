@@ -108,7 +108,7 @@ pub(in crate::ui) fn focus_previous(items: &mut [&mut text_input::State]) -> Opt
         }
     }
 
-    for w in (1..items.len()).into_iter() {
+    for w in 1..items.len() {
         eprintln!("Item {} has focus: {}", w, items[w].is_focused());
         if items[w].is_focused() {
             items[w].unfocus();

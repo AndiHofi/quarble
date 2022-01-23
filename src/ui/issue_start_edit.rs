@@ -26,6 +26,7 @@ pub struct IssueStartEdit {
     builder: IssueStartBuilder,
     settings: SettingsRef,
     orig: Option<WorkStart>,
+    last_end: Option<Time>,
 }
 
 impl IssueStartEdit {
@@ -33,6 +34,10 @@ impl IssueStartEdit {
         settings: SettingsRef,
         active_day: Option<&ActiveDay>,
     ) -> Box<IssueStartEdit> {
+        let now = settings.load().timeline.time_now();
+        let last_end = active_day.and_then(|d| {
+            d.last_action_end(now)
+        });
         Box::new(Self {
             top_bar: TopBar {
                 title: "Start issue:",
@@ -45,12 +50,13 @@ impl IssueStartEdit {
             builder: IssueStartBuilder::default(),
             settings,
             orig: None,
+            last_end,
         })
     }
 
     pub fn entry_to_edit(&mut self, e: WorkStart) {
         let input = format!("{} {} {}", e.ts, e.task.ident, e.description);
-        self.builder.parse_input(&self.settings.load(), &input);
+        self.builder.parse_input(&self.settings.load(), self.last_end, &input);
         self.input = input;
         self.orig = Some(e);
     }
@@ -121,7 +127,7 @@ impl MainView for IssueStartEdit {
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Is(IssueStartMessage::TextChanged(input)) => {
-                self.builder.parse_input(&self.settings.load(), &input);
+                self.builder.parse_input(&self.settings.load(), self.last_end, &input);
                 self.input = input;
                 self.follow_up()
             }
@@ -157,8 +163,13 @@ impl IssueStartBuilder {
         }
     }
 
-    fn parse_input(&mut self, settings: &Settings, input: &str) {
-        let (time, input) = Time::parse_with_offset(&settings.timeline, input);
+    fn parse_input(&mut self, settings: &Settings, last_end: Option<Time>, input: &str) {
+        let (time, input) = if let Some(rest) = input.strip_prefix('l') {
+            (last_end.map(ParseResult::Valid).unwrap_or(ParseResult::Invalid(())), rest)
+        } else {
+            Time::parse_with_offset(&settings.timeline, input)
+        };
+
         let IssueParsed {
             r: issue,
             input: matching,

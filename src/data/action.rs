@@ -88,6 +88,20 @@ impl Action {
             Action::Doctor(_) => 10,
         }
     }
+
+    pub fn action_end(&self) -> Option<Time> {
+        match self {
+            Action::Work(w) => Some(w.end),
+            Action::WorkEvent(w) => Some(w.ts),
+            Action::WorkStart(w) => Some(w.ts),
+            Action::WorkEnd(w) => Some(w.ts),
+            Action::DayStart(w) => Some(w.ts),
+            Action::DayEnd(w) => Some(w.ts),
+            Action::ZA(w) => Some(w.end),
+            Action::Doctor(w) => Some(w.end),
+            _ => None,
+        }
+    }
 }
 
 impl TimedAction for Action {

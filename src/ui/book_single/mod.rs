@@ -7,6 +7,7 @@ use parsing::WorkBuilder;
 use crate::conf::{Settings, SettingsRef};
 use crate::data::{Action, ActiveDay, JiraIssue, RecentIssuesRef, Work};
 use crate::parsing::parse_result::ParseResult;
+use crate::parsing::time::Time;
 use crate::ui::clip_read::ClipRead;
 use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;
@@ -28,16 +29,25 @@ pub struct BookSingleUI {
     settings: SettingsRef,
     orig: Option<Work>,
     recent_issues: RecentIssuesRef,
+    last_end: Option<Time>,
 }
 
 impl BookSingleUI {
     fn parse_input(&mut self, text: &str) {
         let recent = self.recent_issues.borrow();
+
         self.builder
-            .parse_input(&self.settings.load(), &recent, text)
+            .parse_input(&self.settings.load(), &recent, self.last_end, text)
     }
 
-    pub fn for_active_day(settings: SettingsRef, recent_issues: RecentIssuesRef, active_day: Option<&ActiveDay>) -> Box<Self> {
+    pub fn for_active_day(
+        settings: SettingsRef,
+        recent_issues: RecentIssuesRef,
+        active_day: Option<&ActiveDay>,
+    ) -> Box<Self> {
+        let now = settings.load().timeline.time_now();
+        let last_end = active_day.and_then(|d| d.last_action_end(now));
+
         Box::new(Self {
             top_bar: TopBar {
                 title: "Book issue:",
@@ -51,6 +61,7 @@ impl BookSingleUI {
             settings,
             orig: None,
             recent_issues,
+            last_end,
         })
     }
 

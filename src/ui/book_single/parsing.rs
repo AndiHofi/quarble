@@ -9,9 +9,17 @@ use crate::parsing::{parse_issue_clipboard, IssueParsed, IssueParser, IssueParse
 use crate::ui::clip_read::ClipRead;
 use crate::util::Timeline;
 use crate::Settings;
+use regex::Regex;
 
 lazy_static! {
-    static ref SEPARATOR: regex::Regex = regex::RegexBuilder::new(r"[ \t\n\r]+").build().unwrap();
+    static ref SEPARATOR: Regex = Regex::new(r"[ \t\n\r]+").unwrap();
+    static ref FROM_LAST: Regex = Regex::new(r"^l\b").unwrap();
+}
+
+pub enum StartTime {
+    Last,
+    Now,
+    Time(Time),
 }
 
 #[derive(Default, Debug)]
@@ -33,9 +41,10 @@ impl WorkBuilder {
         &mut self,
         settings: &Settings,
         recent_issues: &RecentIssues,
+        last_end: Option<Time>,
         text: &str,
     ) {
-        parse(self, settings, recent_issues, text)
+        parse(self, settings, recent_issues, last_end, text)
     }
 
     pub(super) fn apply_clipboard(&mut self, value: Option<String>) {
@@ -97,27 +106,37 @@ impl WorkBuilder {
     }
 }
 
-fn parse(b: &mut WorkBuilder, settings: &Settings, recent_issues: &RecentIssues, input: &str) {
+fn parse(
+    b: &mut WorkBuilder,
+    settings: &Settings,
+    recent_issues: &RecentIssues,
+    last_end: Option<Time>,
+    input: &str,
+) {
     enum TorD {
         Time(Time),
         Dur(TimeRelative),
+        Last,
     }
 
     fn parse_time<'a, 'b>(
         timeline: &'b Timeline,
         input: &'a str,
     ) -> (ParseResult<TorD, ()>, &'a str) {
-        let t1 = Time::parse_with_offset(timeline, input);
-        let t1 = match t1 {
-            (ParseResult::None | ParseResult::Incomplete, _) => {
-                let (tr, rest) = TimeRelative::parse_relative(input);
-                (
-                    tr.and_then(|r| timeline.time_now().try_add_relative(r).into())
-                        .map(TorD::Time),
-                    rest,
-                )
+        let t1 = if let Some(c) = FROM_LAST.captures(input) {
+            (ParseResult::Valid(TorD::Last), &input[c.len()..])
+        } else {
+            match Time::parse_with_offset(timeline, input) {
+                (ParseResult::None | ParseResult::Incomplete, _) => {
+                    let (tr, rest) = TimeRelative::parse_relative(input);
+                    (
+                        tr.and_then(|r| timeline.time_now().try_add_relative(r).into())
+                            .map(TorD::Time),
+                        rest,
+                    )
+                }
+                (absolute, rest) => (absolute.map(TorD::Time), rest),
             }
-            (absolute, rest) => (absolute.map(TorD::Time), rest),
         };
 
         match t1 {
@@ -151,6 +170,19 @@ fn parse(b: &mut WorkBuilder, settings: &Settings, recent_issues: &RecentIssues,
         }
         (ParseResult::Valid(TorD::Time(s)), ParseResult::Valid(TorD::Dur(dur))) => {
             (ParseResult::Valid(s), s.try_add_relative(dur).into())
+        }
+        (ParseResult::Valid(TorD::Last), ParseResult::Valid(TorD::Time(s)))
+            if last_end.is_some() =>
+        {
+            (ParseResult::Valid(last_end.unwrap()), ParseResult::Valid(s))
+        }
+        (ParseResult::Valid(TorD::Last), ParseResult::Valid(TorD::Dur(s)))
+            if last_end.is_some() =>
+        {
+            (
+                ParseResult::Valid(last_end.unwrap()),
+                ParseResult::Valid(last_end.unwrap() + s),
+            )
         }
         (ParseResult::Valid(TorD::Dur(dur)), ParseResult::Valid(TorD::Time(e))) => {
             let s: ParseResult<Time, ()> = e.try_add_relative(-dur).into();

@@ -95,4 +95,11 @@ impl ActiveDay {
             self.active_issue.clone()
         }
     }
+
+    pub fn last_action_end(&self, now: Time) -> Option<Time> {
+        self.actions()
+                .iter()
+                .filter_map(|t| t.action_end().filter(|end| *end <= now))
+                .last()
+    }
 }

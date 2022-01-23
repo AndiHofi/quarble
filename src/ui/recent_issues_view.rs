@@ -1,5 +1,6 @@
 use iced_core::Length;
 use iced_native::widget::{Column, Row};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::data::{RecentIssue, RecentIssuesData, RecentIssuesRef};
 use crate::ui::util::h_space;
@@ -62,8 +63,8 @@ impl MainView for RecentIssuesView {
         let mut lines = Column::new();
         let mut current_row = Row::new();
 
-        for (num, recent) in self.visible.iter().enumerate() {
-            if num % 3 == 0 {
+        for (num, recent) in self.visible.iter().enumerate().take(8) {
+            if num % 2 == 0 {
                 let mut tmp = Row::new();
                 std::mem::swap(&mut tmp, &mut current_row);
                 lines = lines.push(tmp);
@@ -76,11 +77,8 @@ impl MainView for RecentIssuesView {
     }
 
     fn update(&mut self, msg: Message) -> Option<Message> {
-        match msg {
-            Message::IssueInput(input) => {
-                self.filter = input;
-            }
-            _ => (),
+        if let Message::IssueInput(input) = msg {
+            self.filter = input;
         };
         None
     }
@@ -92,16 +90,27 @@ fn build_recent(num: usize, recent: &RecentIssue) -> QElement {
         .description
         .as_deref()
         .or(recent.issue.default_action.as_deref())
-        .unwrap_or("<no description>")
-        .to_string();
+        .unwrap_or("<no description>");
+
+    let description = limit_text_length(&description);
 
     Row::with_children(vec![
         text(format!("{}:", num)),
         h_space(style::SPACE),
         text(&recent.issue.ident),
+        h_space(style::SPACE),
         text(description),
     ])
-    .max_width(300)
-    .width(Length::Units(300))
+    .max_width(600)
+    .width(Length::Units(500))
     .into()
+}
+
+fn limit_text_length(description: &&str) -> String {
+    let description = if let Some((i, _)) = description.grapheme_indices(false).nth(50) {
+        format!("{}…", &description[..i])
+    } else {
+        description.to_string()
+    };
+    description
 }
