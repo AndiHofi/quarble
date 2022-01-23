@@ -34,7 +34,6 @@ use crate::ui::util::v_space;
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
 use crate::Settings;
 
-mod book;
 mod book_single;
 mod clip_read;
 mod current_day;
@@ -56,8 +55,6 @@ mod top_bar;
 mod util;
 mod view_id;
 mod window_configurator;
-mod work_entry_edit;
-mod work_start_edit;
 
 pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     let config_settings = main_action.settings.clone();
@@ -265,9 +262,6 @@ impl iced_winit::Program for Quarble {
                     return Command::single(clipboard);
                 }
                 m => match &mut self.current_view {
-                    CurrentView::Book(b) => {
-                        message = b.update(m);
-                    }
                     CurrentView::Fds(fds) => {
                         message = fds.update(m);
                     }
@@ -300,7 +294,6 @@ impl iced_winit::Program for Quarble {
         let view_id = self.current_view.view_id();
         let settings = self.settings.load();
         let content = match &mut self.current_view {
-            CurrentView::Book(book) => book.view(&settings),
             CurrentView::Fds(fds) => fds.view(&settings),
             CurrentView::Fde(fde) => fde.view(&settings),
             CurrentView::CdUi(cdui) => cdui.view(&settings),

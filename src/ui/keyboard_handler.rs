@@ -60,7 +60,6 @@ fn handle_control_shortcuts(key_code: KeyCode) -> Option<Message> {
         KeyCode::X => Some(Message::ChangeView(ViewId::Export)),
         KeyCode::C => Some(Message::CopyValue),
         KeyCode::Key1 => Some(Message::ChangeView(ViewId::CurrentDayUi)),
-        KeyCode::Key2 => Some(Message::ChangeView(ViewId::Book)),
         KeyCode::Enter | KeyCode::NumpadEnter => Some(Message::SubmitCurrent(StayActive::Yes)),
         KeyCode::Left => Some(Message::ChangeDayRelative(-1, Arc::new(WeekDayForwarder))),
         KeyCode::Right => Some(Message::ChangeDayRelative(1, Arc::new(WeekDayForwarder))),
@@ -86,7 +85,6 @@ fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Messa
                     KeyCode::E => Some(Message::ChangeView(ViewId::BookIssueEnd)),
                     KeyCode::X => Some(Message::ChangeView(ViewId::Export)),
                     KeyCode::Key1 => Some(Message::ChangeView(ViewId::CurrentDayUi)),
-                    KeyCode::Key2 => Some(Message::ChangeView(ViewId::Book)),
                     KeyCode::Enter | KeyCode::NumpadEnter => {
                         Some(Message::SubmitCurrent(StayActive::Default))
                     }

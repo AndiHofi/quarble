@@ -6,7 +6,6 @@ pub enum ViewId {
     BookIssueEnd,
     FastDayStart,
     FastDayEnd,
-    Book,
     Export,
     Exit,
 }

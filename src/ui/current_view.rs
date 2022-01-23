@@ -1,6 +1,5 @@
 use crate::conf::SettingsRef;
 use crate::data::{Action, ActiveDay, RecentIssuesRef};
-use crate::ui::book::Book;
 use crate::ui::book_single::BookSingleUI;
 use crate::ui::current_day::CurrentDayUI;
 use crate::ui::export::DayExportUi;
@@ -11,7 +10,6 @@ use crate::ui::issue_start_edit::IssueStartEdit;
 use crate::ui::{Exit, ViewId};
 
 pub enum CurrentView {
-    Book(Box<Book>),
     Fds(Box<FastDayStart>),
     Fde(Box<FastDayEnd>),
     CdUi(Box<CurrentDayUI>),
@@ -25,7 +23,6 @@ pub enum CurrentView {
 impl CurrentView {
     pub fn view_id(&self) -> ViewId {
         match &self {
-            CurrentView::Book(_) => ViewId::Book,
             CurrentView::Fds(_) => ViewId::FastDayStart,
             CurrentView::Fde(_) => ViewId::FastDayEnd,
             CurrentView::CdUi(_) => ViewId::CurrentDayUi,
@@ -43,10 +40,7 @@ impl CurrentView {
         recent_issues: RecentIssuesRef,
         active_day: Option<&ActiveDay>,
     ) -> CurrentView {
-        let guard = settings.load();
-
         match id {
-            ViewId::Book => CurrentView::Book(Book::new(&guard)),
             ViewId::FastDayStart => {
                 CurrentView::Fds(FastDayStart::for_work_day(settings, active_day))
             }

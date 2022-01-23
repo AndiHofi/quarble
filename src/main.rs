@@ -72,7 +72,6 @@ fn main_inner() -> anyhow::Result<()> {
         ["day_start"] => InitialAction::Ui(ViewId::FastDayStart),
         ["day_end"] => InitialAction::Ui(ViewId::FastDayEnd),
         ["book"] => InitialAction::Ui(ViewId::BookSingle),
-        ["booking"] => InitialAction::Ui(ViewId::Book),
         ["show"] | [] => InitialAction::Ui(ViewId::CurrentDayUi),
         ["print_day"] => InitialAction::Cmd(CmdId::PrintDay),
         unexpected => bail!("Unexpected arguments: {}", unexpected.join(" ")),
