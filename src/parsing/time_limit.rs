@@ -2,7 +2,6 @@ use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_relative::TimeRelative;
 use std::fmt::Write;
-use std::num::NonZeroU8;
 use std::str::FromStr;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -11,12 +10,8 @@ pub struct TimeRange {
     max: Time,
 }
 
+#[allow(dead_code)]
 impl TimeRange {
-    pub const EMPTY: Self = Self {
-        min: Time::ZERO,
-        max: Time::ZERO,
-    };
-
     pub fn new(mut min: Time, max: Time) -> Self {
         if min > max {
             min = max;
@@ -162,108 +157,7 @@ impl Default for TimeRange {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct TimeLimit {
-    range: TimeRange,
-    resolution: NonZeroU8,
-}
-
-impl Default for TimeLimit {
-    fn default() -> Self {
-        Self {
-            range: TimeRange::default(),
-            resolution: NonZeroU8::new(15).unwrap(),
-        }
-    }
-}
-
-impl TimeLimit {
-    pub const EMPTY: Self = Self {
-        range: TimeRange::EMPTY,
-        resolution: unsafe { NonZeroU8::new_unchecked(1) },
-    };
-
-    pub fn simple(min: Time, max: Time) -> Self {
-        Self::new(min, max, 1)
-    }
-
-    pub fn for_range(range: TimeRange, resolution: u8) -> Self {
-        if range.is_empty() && resolution <= 1 {
-            Self::EMPTY
-        } else {
-            let resolution = NonZeroU8::new(resolution).unwrap();
-            Self { range, resolution }
-        }
-    }
-
-    pub fn new(min: Time, max: Time, resolution: u8) -> Self {
-        let range = TimeRange::new(min, max);
-        Self::for_range(range, resolution)
-    }
-
-    pub fn min(&self) -> Time {
-        self.range.min()
-    }
-
-    pub fn max(&self) -> Time {
-        self.range.max()
-    }
-
-    pub fn resolution(&self) -> NonZeroU8 {
-        self.resolution
-    }
-
-    pub fn is_valid(&self, input: &str) -> TimeResult {
-        self.range.is_valid(input)
-    }
-
-    pub fn check_time_overlaps(&self, t: Time) -> TimeResult {
-        self.range.check_time_overlaps(t)
-    }
-
-    pub fn check_hm(&self, h: u32, m: u32) -> TimeResult {
-        self.range.check_hm(h, m)
-    }
-
-    pub fn check_hp(&self, h: u32, p: u32) -> TimeResult {
-        self.range.check_hp(h, p)
-    }
-
-    pub fn split_at(&self, time: Time) -> (TimeLimit, TimeLimit) {
-        (self.with_max(time), self.with_min(time))
-    }
-
-    pub fn split(&self, exclude: TimeLimit) -> (TimeLimit, TimeLimit) {
-        (self.with_max(exclude.min()), self.with_min(exclude.max()))
-    }
-
-    pub fn with_range(self, range: TimeRange) -> Self {
-        if range.is_empty() && self.resolution.get() == 1 {
-            Self::EMPTY
-        } else {
-            Self {
-                range,
-                resolution: self.resolution,
-            }
-        }
-    }
-
-    pub fn with_min(self, new_min: Time) -> Self {
-        self.with_range(self.range.with_min(new_min))
-    }
-
-    pub fn with_max(self, new_max: Time) -> Self {
-        self.with_range(self.range.with_max(new_max))
-    }
-}
-
-impl From<TimeLimit> for TimeRange {
-    fn from(l: TimeLimit) -> Self {
-        l.range
-    }
-}
-
-pub fn check_any_limit_overlaps(t: Time, limits: &[TimeLimit]) -> TimeResult {
+pub fn check_any_limit_overlaps(t: Time, limits: &[TimeRange]) -> TimeResult {
     for limit in limits {
         match limit.check_time_overlaps(t) {
             ParseResult::Invalid(_) => (),

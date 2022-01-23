@@ -23,7 +23,7 @@ use crate::data::{
 use crate::db::DB;
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
-use crate::parsing::time_limit::TimeLimit;
+use crate::parsing::time_limit::{TimeRange};
 use crate::ui::current_day::CurrentDayMessage;
 use crate::ui::export::DayExportMessage;
 use crate::ui::main_action::MainAction;
@@ -90,7 +90,6 @@ pub struct Quarble {
     settings: SettingsRef,
     db: DB,
     active_day: Option<ActiveDay>,
-    active_day_dirty: bool,
     initial_view: ViewId,
     tab_bar: TabBar,
     recent_issues: RecentIssuesRef,
@@ -361,7 +360,6 @@ impl iced_winit::Application for Quarble {
             settings,
             db,
             active_day,
-            active_day_dirty: false,
             initial_view: flags.initial_view,
             tab_bar: TabBar::new(flags.initial_view),
             recent_view,
@@ -429,14 +427,6 @@ impl MainView for Exit {
     }
 }
 
-fn input_message(s: &str, actions: &BTreeSet<Action>) -> String {
-    match min_max_booked(actions) {
-        (None, None) => s.to_string(),
-        (Some(start), None) | (None, Some(start)) => format!("{}: First action on {}", s, start),
-        (Some(start), Some(end)) => format!("{}: Already booked from {} to {}", s, start, end),
-    }
-}
-
 fn day_info_message(d: Option<&ActiveDay>) -> String {
     if let Some(d) = d {
         match min_max_booked(d.actions()) {
@@ -453,7 +443,7 @@ fn day_info_message(d: Option<&ActiveDay>) -> String {
     }
 }
 
-fn unbooked_time(d: Option<&ActiveDay>) -> Vec<TimeLimit> {
+fn unbooked_time(d: Option<&ActiveDay>) -> Vec<TimeRange> {
     d.map(|d| unbooked_time_for_day(d.actions()))
         .unwrap_or_default()
 }
@@ -480,25 +470,25 @@ fn min_max_booked(actions: &BTreeSet<Action>) -> (Option<Time>, Option<Time>) {
     }
 }
 
-fn unbooked_time_for_day(actions: &BTreeSet<Action>) -> Vec<TimeLimit> {
+fn unbooked_time_for_day(actions: &BTreeSet<Action>) -> Vec<TimeRange> {
     let mut result = Vec::new();
-    let mut current_limit = TimeLimit::default();
+    let mut current_limit = TimeRange::default();
     for action in actions {
         let (min, max) = action.times();
         let (f, s) = if let Some(max) = max {
-            let sep = TimeLimit::simple(min, max);
+            let sep = TimeRange::new(min, max);
             current_limit.split(sep)
         } else {
             current_limit.split_at(min)
         };
-        match (f, s) {
-            (TimeLimit::EMPTY, TimeLimit::EMPTY) => (),
-            (TimeLimit::EMPTY, s) => current_limit = s,
-            (f, TimeLimit::EMPTY) => current_limit = f,
-            (f, s) => {
-                result.push(f);
-                current_limit = s;
-            }
+
+        if !f.is_empty() && !s.is_empty() {
+            result.push(f);
+            current_limit = s;
+        } else if !f.is_empty() {
+            current_limit = f;
+        } else if !s.is_empty() {
+            current_limit = s;
         }
     }
 

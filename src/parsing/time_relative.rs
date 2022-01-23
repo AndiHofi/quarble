@@ -129,13 +129,6 @@ impl TimeRelative {
     }
 }
 
-fn check_h_m(neg: bool, h: u8, m: u8, tail: &str) -> (ParseResult<TimeRelative, ()>, &str) {
-    match TimeRelative::new(neg, h, m) {
-        Some(tr) => (ParseResult::Valid(tr), tail),
-        None => (ParseResult::Invalid(()), tail),
-    }
-}
-
 impl AddAssign for TimeRelative {
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs;

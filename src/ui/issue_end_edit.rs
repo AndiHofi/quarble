@@ -165,8 +165,11 @@ mod test {
 
     #[test]
     fn test_issue_end() {
-        let timeline = StaticTimeline::parse("2022-1-10 17:00");
-        let settings = into_settings_ref(Settings::default().with_timeline(timeline));
+        let timeline = StaticTimeline::parse("2022-1-10 17:00").into();
+        let settings = into_settings_ref(Settings {
+            timeline,
+            ..Settings::default()
+        });
         let mut ui = IssueEndEdit::for_active_day(settings, None);
 
         let on_input = ui.update(Message::Ie(IssueEndMessage::InputChanged(

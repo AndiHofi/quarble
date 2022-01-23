@@ -32,15 +32,7 @@ pub struct ActiveDay {
     actions: BTreeSet<Action>,
 }
 
-lazy_static::lazy_static! {
-    static ref NO_ACTIONS_INT: BTreeSet<Action> = BTreeSet::new();
-}
-
 impl ActiveDay {
-    pub fn no_action() -> &'static BTreeSet<Action> {
-        &NO_ACTIONS_INT
-    }
-
     pub fn new(day: Day, main_location: Location, active_issue: Option<JiraIssue>) -> ActiveDay {
         ActiveDay {
             day,

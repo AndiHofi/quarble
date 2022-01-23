@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use crate::conf::into_settings_ref;
 use crate::data::test_support::time;
@@ -12,7 +13,7 @@ use crate::ui::book_single::{BookSingleMessage, BookSingleUI};
 use crate::ui::clip_read::ClipRead;
 use crate::ui::stay_active::StayActive;
 use crate::ui::{MainView, Message};
-use crate::util::{StaticTimeline, TimelineProvider};
+use crate::util::{StaticTimeline};
 use crate::Settings;
 
 fn meeting() -> JiraIssue {
@@ -26,9 +27,12 @@ fn meeting() -> JiraIssue {
 fn make_ui(now: &str) -> Box<BookSingleUI> {
     let date_time = format!("2020-10-10 {}", now);
     let tl = StaticTimeline::parse(&date_time);
-    let mut settings = Settings::default().with_timeline(tl);
-    settings.issue_parser =
-        JiraIssueParser::new(BTreeMap::from_iter([('a', meeting())].into_iter()));
+    let settings = Settings {
+        timeline: Arc::new(tl),
+        issue_parser: JiraIssueParser::new(BTreeMap::from_iter([('a', meeting())].into_iter())),
+        ..Default::default()
+    };
+
     let settings = into_settings_ref(settings);
     let active_day = ActiveDayBuilder {
         day: settings.load().timeline.today(),
@@ -199,11 +203,14 @@ fn applies_recent_issues() {
     });
 
     let recent = RecentIssuesRef::empty(settings.clone());
-    recent.issue_used(&JiraIssue {
-        ident: "RECENT-1".to_string(),
-        default_action: Some("Default action".to_string()),
-        description: Some("Description".to_string()),
-    });
+    recent.issue_used_with_comment(
+        &JiraIssue {
+            ident: "RECENT-1".to_string(),
+            default_action: Some("Default action".to_string()),
+            description: Some("Description".to_string()),
+        },
+        None,
+    );
 
     let mut ui = BookSingleUI::for_active_day(
         settings.clone(),

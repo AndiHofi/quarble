@@ -5,6 +5,7 @@ use crate::parsing::time_limit::TimeRange;
 use crate::parsing::time_relative::TimeRelative;
 use std::cmp::Ordering;
 
+/// Temporary struct for entry normalization
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct We {
     pub id: String,

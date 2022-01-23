@@ -24,6 +24,8 @@ impl<'a, A> iced_winit::window_configurator::WindowConfigurator<A> for MyWindowC
         window_builder: WindowBuilder,
     ) -> WindowBuilder {
         let window_builder = self.base.configure_builder(window_target, window_builder);
+        let window_builder = platform_specific(window_builder);
+
         let monitors: Vec<_> = window_target.available_monitors().collect();
         let monitor = match &self.display_selection {
             DisplaySelection::Largest => monitors
@@ -40,6 +42,7 @@ impl<'a, A> iced_winit::window_configurator::WindowConfigurator<A> for MyWindowC
                     .unwrap()
             }
         };
+
         let is_wayland = is_wayland(window_target);
 
         let size: LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());

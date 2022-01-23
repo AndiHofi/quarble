@@ -284,6 +284,7 @@ fn day_splits(
     Ok(parts)
 }
 
+/// Combine entries with the same issue id into one. Total booked time stays constant.
 fn combine_bookings(work: &mut Vec<We>) {
     let orig: Vec<We> = std::mem::take(work);
 
@@ -300,6 +301,9 @@ fn combine_bookings(work: &mut Vec<We>) {
     compact_booking(work)
 }
 
+/// Chains entries in the vec together, keeps total duration constant.
+///
+/// Only the start time of the first entry stays unchanged, all other times are shifted.
 fn compact_booking(work: &mut Vec<We>) {
     let mut iter = work.iter_mut();
 
@@ -509,26 +513,4 @@ fn handle_free_standing(entries: BTreeSet<Action>) -> Vec<FilledRange> {
             _ => panic!("did filter for Work"),
         })
         .collect()
-}
-
-fn merge_adjacent_ranges(ranges: &mut Vec<FilledRange>) {
-    let orig = std::mem::take(ranges);
-
-    let mut iter = orig.into_iter();
-    if let Some(first) = iter.next() {
-        let last_end = first.range.max();
-        let mut current = first;
-
-        for mut r in iter {
-            if r.range.min() > last_end {
-                std::mem::swap(&mut current, &mut r);
-                ranges.push(r);
-            } else {
-                current.work.append(&mut r.work);
-                current.range = current.range.with_max(r.range.max());
-            }
-        }
-
-        ranges.push(current);
-    }
 }

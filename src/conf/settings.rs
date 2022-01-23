@@ -31,11 +31,6 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn with_timeline<T: TimelineProvider + 'static>(mut self, timeline: T) -> Self {
-        self.timeline = Arc::new(timeline);
-        self
-    }
-
     pub fn from_ser(ser: Option<SettingsSer>) -> Self {
         if let Some(s) = ser {
             Self {

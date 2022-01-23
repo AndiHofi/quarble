@@ -15,14 +15,6 @@ impl Default for StayActive {
 }
 
 impl StayActive {
-    pub fn close_app(self, settings: &Settings) -> bool {
-        match self {
-            StayActive::Default => settings.close_on_safe,
-            StayActive::No => true,
-            StayActive::Yes => false,
-        }
-    }
-
     pub fn apply_settings(self, settings: &Settings) -> Self {
         match self {
             StayActive::Default => {

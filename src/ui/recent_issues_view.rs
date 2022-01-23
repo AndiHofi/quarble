@@ -1,7 +1,7 @@
 use iced_core::Length;
 use iced_native::widget::{Column, Row};
 
-use crate::data::{RecentIssue, RecentIssues, RecentIssuesData, RecentIssuesRef};
+use crate::data::{RecentIssue, RecentIssuesData, RecentIssuesRef};
 use crate::ui::util::h_space;
 use crate::ui::{style, text, MainView, Message, QElement};
 use crate::Settings;

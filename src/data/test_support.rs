@@ -1,7 +1,7 @@
 use crate::data::*;
 use crate::parsing;
 use crate::parsing::time::Time;
-use crate::parsing::time_limit::TimeLimit;
+use crate::parsing::time_limit::{TimeRange};
 use crate::ui::fast_day_start::DayStartBuilder;
 use crate::util::{DefaultTimeline, TimelineProvider};
 use std::sync::Arc;
@@ -49,7 +49,7 @@ pub fn issue_end(end: &str, issue: &str) -> Action {
 pub fn day_start(input: &str) -> Action {
     let timeline: Arc<dyn TimelineProvider> = Arc::new(DefaultTimeline);
     let mut builder = DayStartBuilder::default();
-    builder.parse_value(&timeline, &[TimeLimit::default()], input);
+    builder.parse_value(&timeline, &[TimeRange::default()], input);
     builder.try_build(&timeline).map(Action::DayStart).unwrap()
 }
 

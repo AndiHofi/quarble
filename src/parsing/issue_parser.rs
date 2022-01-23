@@ -12,10 +12,10 @@ lazy_static! {
     static ref ISSUE_SHORTCUT: Regex = Regex::new(r"^(?P<abbr>[a-zA-Z])\b").unwrap();
     static ref ISSUE: Regex = Regex::new(r"^(?P<id>([a-zA-Z]+-[0-9]+))").unwrap();
     static ref ISSUE_CLIPBOARD: Regex =
-        Regex::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]{0,3}))(?:(?:\W)+(?P<comment>.*))?").unwrap();
+        Regex::new(r"(?P<id>(?:[a-zA-Z]+)-(?:[0-9]{1,10}))(?:(?:\W)+(?P<comment>.*))?").unwrap();
     static ref ISSUE_DESCRIPTION: Regex =
         Regex::new(r"^(?P<id>([a-zA-Z]+-[0-9]+))(?:\W+)(?P<comment>[^#]+)#").unwrap();
-    static ref RECENT_ISSUE: Regex = Regex::new(r"^r(?P<recent>[1-9][0-9]*)").unwrap();
+    static ref RECENT_ISSUE: Regex = Regex::new(r"^r(?P<recent>[1-9][0-9]{0,2})").unwrap();
 }
 
 pub trait IssueParser {

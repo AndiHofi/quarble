@@ -31,6 +31,7 @@ pub struct CurrentDayUI {
     day_value: String,
     settings: SettingsRef,
     entries: Vec<Entry>,
+    selected_entry: Option<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -66,6 +67,7 @@ impl CurrentDayUI {
             day_value: String::new(),
             settings,
             entries,
+            selected_entry: None,
         })
     }
 }
@@ -86,7 +88,12 @@ impl MainView for CurrentDayUI {
             Row::with_children(vec![text("No active issue")])
         };
 
-        let entries: Vec<QElement> = self.entries.iter_mut().map(edit_action_row).collect();
+        let entries: Vec<QElement> = self
+            .entries
+            .iter_mut()
+            .enumerate()
+            .map(|(index, e)| edit_action_row(e, index, self.selected_entry))
+            .collect();
 
         let mut entries_scroll = Scrollable::new(&mut self.scroll_state).width(Length::Fill);
         for e in entries {
@@ -139,7 +146,7 @@ impl MainView for CurrentDayUI {
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .style(content_style)
-                .padding(style::SPACE_PX)
+                .padding([5, 1])
                 .into(),
         ])
         .into()
@@ -174,23 +181,57 @@ impl MainView for CurrentDayUI {
             Message::Cd(CurrentDayMessage::RequestDelete(id)) => self.entries.get(id).map(|e| {
                 Message::DeleteAction(DeleteAction(StayActive::Yes, Box::new(e.action.clone())))
             }),
+            Message::Up => {
+                self.selected_entry = match self.selected_entry {
+                    None | Some(0) => Some(self.entries.len() - 1),
+                    Some(index) => Some(index - 1),
+                };
+                None
+            }
+            Message::Down => {
+                self.selected_entry = match self.selected_entry {
+                    None => Some(0),
+                    Some(index) if index >= self.entries.len() - 1 => Some(0),
+                    Some(index) => Some(index + 1),
+                };
+                None
+            }
+            Message::SubmitCurrent(_) => self
+                .selected_entry
+                .map(|e| Message::Cd(CurrentDayMessage::RequestEdit(e))),
+            Message::Del => self
+                .selected_entry
+                .map(|e| Message::Cd(CurrentDayMessage::RequestDelete(e))),
             _ => None,
         }
     }
 }
 
-fn edit_action_row(entry: &mut Entry) -> QElement {
+fn edit_action_row(entry: &mut Entry, index: usize, selected_index: Option<usize>) -> QElement {
     let delete_button = style::inline_button(&mut entry.delete_button, "D")
         .on_press(Message::Cd(CurrentDayMessage::RequestDelete(entry.id)));
     let edit_button = style::inline_button(&mut entry.edit_button, "E")
         .on_press(Message::Cd(CurrentDayMessage::RequestEdit(entry.id)));
-    Row::with_children(vec![
+    let background = style::ContentRow {
+        state: if Some(index) == selected_index {
+            style::RowState::Selected
+        } else if index % 2 == 1 {
+            style::RowState::Odd
+        } else {
+            style::RowState::Even
+        },
+    };
+
+    Container::new(Row::with_children(vec![
         delete_button.into(),
         h_space(Length::Units(3)),
         edit_button.into(),
         h_space(style::DSPACE),
         action_row(&entry.action),
-    ])
+    ]))
+    .style(background)
+    .width(Length::Fill)
+    .padding([2, 5])
     .into()
 }
 

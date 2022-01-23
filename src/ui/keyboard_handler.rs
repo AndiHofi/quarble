@@ -90,6 +90,9 @@ fn handle_keyboard_event(key_event: iced_winit::keyboard::Event) -> Option<Messa
                     KeyCode::Enter | KeyCode::NumpadEnter => {
                         Some(Message::SubmitCurrent(StayActive::Default))
                     }
+                    KeyCode::Up => Some(Message::Up),
+                    KeyCode::Down => Some(Message::Down),
+                    KeyCode::Delete => Some(Message::Del),
                     _ => None,
                 }
             } else if modifiers.shift() {

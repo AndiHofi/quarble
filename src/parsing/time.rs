@@ -160,11 +160,11 @@ impl Time {
                     Self::hm(h, m)
                 }
             }
-            RoundMode::Down | RoundMode::SatDown => {
+            RoundMode::Down => {
                 let m = (m / resolution) * resolution.get();
                 Self::hm(h, m)
             }
-            RoundMode::Up | RoundMode::SatUp => {
+            RoundMode::Up => {
                 let rem = m % resolution;
                 if rem == 0 {
                     self

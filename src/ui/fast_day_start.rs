@@ -2,10 +2,9 @@ use iced_wgpu::TextInput;
 use iced_winit::widget::{text_input, Column, Row, Space, Text};
 
 use crate::conf::{Settings, SettingsRef};
-use crate::data::{Action, ActiveDay, DayStart, Location, TimedAction};
+use crate::data::{Action, ActiveDay, DayStart, Location};
 use crate::parsing::parse_result::ParseResult;
-use crate::parsing::time::Time;
-use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeLimit, TimeResult};
+use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeRange, TimeResult};
 use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;
 use crate::ui::{day_info_message, style, unbooked_time, MainView, Message, QElement};
@@ -21,7 +20,7 @@ pub struct FastDayStart {
     text: String,
     text_state: text_input::State,
     value: Option<DayStart>,
-    limits: Vec<TimeLimit>,
+    limits: Vec<TimeRange>,
     builder: DayStartBuilder,
     timeline: Timeline,
     orig: Option<DayStart>,
@@ -91,7 +90,7 @@ impl DayStartBuilder {
         }
     }
 
-    pub fn parse_value(&mut self, timeline: &Timeline, limits: &[TimeLimit], text: &str) {
+    pub fn parse_value(&mut self, timeline: &Timeline, limits: &[TimeRange], text: &str) {
         fn parse_location(text: &str) -> (ParseResult<Location, ()>, &str) {
             let text = text.trim();
             let (location, text) = if text.starts_with(&['h', 'H'][..]) {
@@ -116,52 +115,6 @@ impl DayStartBuilder {
 
         self.ts = result;
     }
-}
-
-fn min_max_booked(actions: &[Action]) -> (Option<Time>, Option<Time>) {
-    match actions {
-        [] => (None, None),
-        [first] => {
-            let (s, e) = first.times();
-            (Some(s), e)
-        }
-        [first, .., last] => {
-            let (s, _) = first.times();
-            let (e1, e2) = last.times();
-            if e2.is_some() {
-                (Some(s), e2)
-            } else {
-                (Some(s), Some(e1))
-            }
-        }
-    }
-}
-
-fn valid_time_limits_for_day_start(actions: &[Action]) -> Vec<TimeLimit> {
-    let mut result = Vec::new();
-    let mut current_limit = TimeLimit::default();
-    for action in actions {
-        let (min, max) = action.times();
-        let (f, s) = if let Some(max) = max {
-            let sep = TimeLimit::simple(min, max);
-            current_limit.split(sep)
-        } else {
-            current_limit.split_at(min)
-        };
-        match (f, s) {
-            (TimeLimit::EMPTY, TimeLimit::EMPTY) => (),
-            (TimeLimit::EMPTY, s) => current_limit = s,
-            (f, TimeLimit::EMPTY) => current_limit = f,
-            (f, s) => {
-                result.push(f);
-                current_limit = s;
-            }
-        }
-    }
-
-    result.push(current_limit);
-
-    result
 }
 
 impl MainView for FastDayStart {
@@ -240,6 +193,7 @@ fn on_submit(
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
     use crate::conf::into_settings_ref;
     use crate::ui::fast_day_start::FastDayStart;
     use crate::util::StaticTimeline;
@@ -254,7 +208,11 @@ mod test {
 
     fn p(i: &[&str]) {
         let timeline = StaticTimeline::parse("2021-12-29 10:00");
-        let settings = into_settings_ref(Settings::default().with_timeline(timeline));
+
+        let settings = into_settings_ref(Settings {
+            timeline: Arc::new(timeline),
+            ..Settings::default()
+        });
         for input in i {
             let mut fds = FastDayStart::for_work_day(settings.clone(), None);
             fds.builder.parse_value(&fds.timeline, &fds.limits, *input);

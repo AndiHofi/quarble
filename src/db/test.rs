@@ -129,7 +129,7 @@ fn day_collection_testing() -> DBResult<()> {
 fn store_load_recent() {
     let timeline = DefaultTimeline;
     let db = TmpDB::new();
-    let empty = RecentIssuesData::new();
+    let empty = RecentIssuesData::default();
     db.store_recent(&empty).unwrap();
     assert_eq!(db.load_recent().unwrap(), empty);
 

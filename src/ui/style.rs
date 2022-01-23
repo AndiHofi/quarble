@@ -9,9 +9,30 @@ pub const DESCRIPTION_WIDTH: Length = Length::Units(500);
 pub const SPACE_PX: u16 = 10;
 pub const SPACE: Length = Length::Units(SPACE_PX);
 pub const DSPACE: Length = Length::Units(2 * SPACE_PX);
+#[allow(dead_code)]
 pub const MIN_WIDGET_WIDTH: Length = Length::Units(200);
 pub const WINDOW_PADDING: u16 = 10;
 pub const TAB_SPACE: Length = Length::Units(3);
+
+pub const HIGHLIGHT_COLOR: Color = Color::from_rgb(0.95, 0.95, 1.0);
+
+const MAIN_COLOR: Color = Color {
+    r: 0.8,
+    g: 0.8,
+    b: 0.95,
+    a: 1.0,
+};
+
+const TEXT_MAIN_COLOR: Color = Color {
+    r: 0.16,
+    g: 0.16,
+    b: 0.19,
+    a: 1.0,
+};
+
+pub const DEFAULT_BACKGROUND: Background = Background::Color(Color::from_rgb(1.0, 1.0, 1.0));
+pub const ODD_BACKGROUND: Background = Background::Color(HIGHLIGHT_COLOR);
+pub const SELECTED_BACKGROUND: Background = Background::Color(MAIN_COLOR);
 
 pub struct ContentStyle;
 
@@ -25,6 +46,31 @@ impl container::StyleSheet for ContentStyle {
         }
     }
 }
+
+pub enum RowState {
+    Even, Odd, Selected
+}
+
+pub struct ContentRow{
+    pub state: RowState
+}
+
+impl container::StyleSheet for ContentRow {
+    fn style(&self) -> Style {
+        let background = match self.state {
+            RowState::Even => DEFAULT_BACKGROUND,
+            RowState::Odd => ODD_BACKGROUND,
+            RowState::Selected => SELECTED_BACKGROUND,
+        };
+        let background = Some(background);
+
+        Style {
+            background,
+            ..Style::default()
+        }
+    }
+}
+
 
 pub struct EditButton;
 
@@ -47,10 +93,10 @@ impl button::StyleSheet for ActiveTab {
     fn active(&self) -> button::Style {
         button::Style {
             shadow_offset: Vector::new(0.0, 0.0),
-            background: Some(Background::Color([0.95, 0.95, 1.0].into())),
+            background: Some(Background::Color(HIGHLIGHT_COLOR)),
             border_radius: 0.0,
             border_width: 2.0,
-            border_color: Color::from([0.95, 0.95, 1.0]),
+            border_color: HIGHLIGHT_COLOR,
             text_color: Color::BLACK,
         }
     }
@@ -78,20 +124,6 @@ impl button::StyleSheet for Tab {
         }
     }
 }
-
-const MAIN_COLOR: Color = Color {
-    r: 0.8,
-    g: 0.8,
-    b: 0.95,
-    a: 1.0,
-};
-
-const TEXT_MAIN_COLOR: Color = Color {
-    r: 0.16,
-    g: 0.16,
-    b: 0.19,
-    a: 1.0,
-};
 
 const UBUNTU_BOLD: &[u8] = include_bytes!("../../fonts/Ubuntu-B.ttf");
 

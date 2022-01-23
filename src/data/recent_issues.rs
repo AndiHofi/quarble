@@ -1,5 +1,4 @@
 use arc_swap::{ArcSwap, Guard};
-use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::num::NonZeroUsize;
@@ -13,12 +12,6 @@ use crate::util::update_arcswap;
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct RecentIssuesData {
     pub issues: Vec<RecentIssue>,
-}
-
-impl RecentIssuesData {
-    pub fn new() -> Self {
-        Self { issues: Vec::new() }
-    }
 }
 
 #[derive(Clone)]
@@ -37,13 +30,9 @@ impl RecentIssuesRef {
     }
 
     pub fn empty(settings: SettingsRef) -> Self {
-        Self::new(RecentIssues::empty(settings))
+        Self::new(RecentIssues::new(Default::default(), settings))
     }
 
-    pub fn issue_used(&self, issue: &JiraIssue) {
-        update_arcswap(&self.0, |r: &mut RecentIssues| r.issue_used(issue));
-    }
-    
     pub fn issue_used_with_comment(&self, issue: &JiraIssue, comment: Option<&str>) {
         update_arcswap(&self.0, |r: &mut RecentIssues| r.issue_used_with_comment(issue, comment))
     }
@@ -67,10 +56,6 @@ pub struct RecentIssues {
 }
 
 impl RecentIssues {
-    pub fn empty(settings: SettingsRef) -> Self {
-        Self::new(RecentIssuesData::new(), settings)
-    }
-
     pub fn new(issues: RecentIssuesData, settings: SettingsRef) -> Self {
         let max_len = settings.load().max_recent_issues;
         let max_len = NonZeroUsize::new(if max_len < 1 { 1 } else { max_len }).unwrap();
@@ -136,10 +121,6 @@ impl RecentIssues {
 
     pub fn list_recent(&self) -> &[RecentIssue] {
         self.issues.as_slice()
-    }
-
-    fn list_recent_view(&self) -> Vec<&RecentIssue> {
-        self.issues.iter().collect()
     }
 
     pub fn find_recent(&self, num: usize) -> Option<&RecentIssue> {
@@ -209,6 +190,13 @@ mod test {
     use crate::parsing::JiraIssueParser;
     use crate::util::{StaticTimeline, TimelineProvider};
 
+    impl RecentIssues {
+
+        fn list_recent_view(&self) -> Vec<&RecentIssue> {
+            self.issues.iter().collect()
+        }
+    }
+
     #[test]
     fn test_vec_move_to_front() {
         let mut v = vec![1];
@@ -244,7 +232,7 @@ mod test {
             settings,
         );
 
-        assert_eq!(recent.list_recent(), vec![recent4, recent3, recent2]);
+        assert_eq!(recent.list_recent_view(), vec![&recent4, &recent3, &recent2]);
     }
 
     #[test]
@@ -277,12 +265,12 @@ mod test {
             settings,
         );
 
-        assert_eq!(recent.list_recent(), vec![recent2.clone(), recent1.clone()]);
+        assert_eq!(recent.list_recent_view(), vec![&recent2, &recent1]);
 
         let recent5 = next_recent(&timeline, "a1");
         recent.issue_used(&recent5.issue);
 
-        assert_eq!(recent.list_recent(), vec![recent2.clone(), recent1.clone()]);
+        assert_eq!(recent.list_recent_view(), vec![&recent2, &recent1]);
 
         let recent6 = next_recent(&timeline, "i3");
         recent.issue_used(&recent6.issue);

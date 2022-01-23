@@ -7,18 +7,14 @@ use std::path::PathBuf;
 use std::process;
 use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::Arc;
-use std::time::SystemTime;
 
 use anyhow::{bail, Context};
-use arc_swap::ArcSwap;
-use chrono::{Local, NaiveDate};
 use opentelemetry::sdk::export::trace::stdout;
 use tracing::{debug, error, info, span};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
-use crate::conf::Settings;
+use crate::conf::{into_settings_ref, Settings};
 use crate::conf::SettingsSer;
 use crate::ui::main_action::{CmdId, InitialAction, MainAction};
 use crate::ui::ViewId;
@@ -96,7 +92,7 @@ fn main_inner() -> anyhow::Result<()> {
     };
 
     let main_action = MainAction {
-        settings: Rc::new(ArcSwap::new(Arc::new(settings))),
+        settings: into_settings_ref(settings),
         initial_view: initial_action,
         db,
         work_day: Rc::new(RefCell::new(work_day)),
@@ -220,12 +216,6 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
     settings.debug = b.debug;
 
     Ok((settings, remaining_args))
-}
-
-fn today() -> NaiveDate {
-    chrono::DateTime::<Local>::from(SystemTime::now())
-        .naive_local()
-        .date()
 }
 
 const SETTINGS_FILE_NAME: &str = "quarble_settings.json";

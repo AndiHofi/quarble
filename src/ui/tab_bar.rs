@@ -7,7 +7,6 @@ use iced_winit::widget::{button, Button, Row};
 
 pub struct TabBar {
     active_view: ViewId,
-    book: button::State,
     current_day_ui: button::State,
     fast_day_start: button::State,
     fast_day_end: button::State,
@@ -23,7 +22,6 @@ impl TabBar {
         Self {
             active_view: initial_view,
 
-            book: Default::default(),
             current_day_ui: Default::default(),
             fast_day_start: Default::default(),
             fast_day_end: Default::default(),
@@ -36,9 +34,6 @@ impl TabBar {
     }
 
     pub fn view(&mut self) -> QElement {
-        fn m(v: ViewId) -> Message {
-            Message::ChangeView(v)
-        }
         let active = self.active_view;
 
         let buttons: Vec<QElement> = vec![
