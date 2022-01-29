@@ -23,7 +23,7 @@ use crate::data::{
 use crate::db::DB;
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
-use crate::parsing::time_limit::{TimeRange};
+use crate::parsing::time_limit::TimeRange;
 use crate::ui::current_day::CurrentDayMessage;
 use crate::ui::export::DayExportMessage;
 use crate::ui::main_action::MainAction;
@@ -165,6 +165,12 @@ impl iced_winit::Program for Quarble {
                 }
                 Message::Reset => {
                     message = Some(Message::ChangeView(self.initial_view));
+                }
+                Message::NextTab => {
+                    message = self.tab_bar.select_next().map(Message::ChangeView);
+                }
+                Message::PrevTab => {
+                    message = self.tab_bar.select_previous().map(Message::ChangeView);
                 }
                 Message::EditAction(EditAction(action)) => {
                     self.recent_view.refresh();

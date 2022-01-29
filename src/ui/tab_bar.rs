@@ -89,6 +89,35 @@ impl TabBar {
         Row::with_children(buttons).height(Length::Units(30)).into()
     }
 
+    pub fn select_next(&self) -> Option<ViewId> {
+        if let Some((index, _)) = ViewId::TAB_ORDER
+            .iter()
+            .enumerate()
+            .find(|(_, id)| **id == self.active_view)
+        {
+            ViewId::TAB_ORDER.get((index + 1) % ViewId::TAB_ORDER.len()).cloned()
+        } else {
+            None
+        }
+    }
+
+    pub fn select_previous(&self) -> Option<ViewId> {
+        if let Some((index, _)) = ViewId::TAB_ORDER
+            .iter()
+            .enumerate()
+            .find(|(_, id)| **id == self.active_view)
+        {
+            let new_view = if index == 0 {
+                *ViewId::TAB_ORDER.last().unwrap()
+            } else {
+                ViewId::TAB_ORDER[index - 1]
+            };
+            Some(new_view)
+        } else {
+            None
+        }
+    }
+
     pub fn set_active_view(&mut self, view: ViewId) {
         self.active_view = view;
     }

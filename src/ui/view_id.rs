@@ -11,6 +11,16 @@ pub enum ViewId {
 }
 
 impl ViewId {
+    pub const TAB_ORDER: &'static [ViewId] = &[
+        Self::CurrentDayUi,
+        Self::FastDayStart,
+        Self::FastDayEnd,
+        Self::BookSingle,
+        Self::BookIssueStart,
+        Self::BookIssueEnd,
+        Self::Export,
+    ];
+
     pub fn show_recent(self) -> bool {
         matches!(
             self,

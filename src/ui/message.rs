@@ -17,6 +17,8 @@ pub enum Message {
     Exit,
     Next,
     Previous,
+    NextTab,
+    PrevTab,
     Up,
     Down,
     Del,
