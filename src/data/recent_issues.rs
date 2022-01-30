@@ -34,11 +34,18 @@ impl RecentIssuesRef {
     }
 
     pub fn issue_used_with_comment(&self, issue: &JiraIssue, comment: Option<&str>) {
-        update_arcswap(&self.0, |r: &mut RecentIssues| r.issue_used_with_comment(issue, comment))
+        update_arcswap(&self.0, |r: &mut RecentIssues| {
+            r.issue_used_with_comment(issue, comment)
+        })
     }
 
     pub fn borrow(&self) -> Guard<Arc<RecentIssues>> {
         self.0.load()
+    }
+
+    #[cfg(test)]
+    pub fn get(&self, index: usize) -> RecentIssue {
+        self.borrow().issues[index].clone()
     }
 }
 
@@ -115,7 +122,7 @@ impl RecentIssues {
                 issue.default_action = Some(c.to_string());
                 self.issue_used(&issue)
             }
-            None => self.issue_used(issue)
+            None => self.issue_used(issue),
         }
     }
 
@@ -191,7 +198,6 @@ mod test {
     use crate::util::{StaticTimeline, TimelineProvider};
 
     impl RecentIssues {
-
         fn list_recent_view(&self) -> Vec<&RecentIssue> {
             self.issues.iter().collect()
         }
@@ -232,7 +238,10 @@ mod test {
             settings,
         );
 
-        assert_eq!(recent.list_recent_view(), vec![&recent4, &recent3, &recent2]);
+        assert_eq!(
+            recent.list_recent_view(),
+            vec![&recent4, &recent3, &recent2]
+        );
     }
 
     #[test]

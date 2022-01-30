@@ -7,6 +7,7 @@ use crate::ui::fast_day_end::FastDayEnd;
 use crate::ui::fast_day_start::FastDayStart;
 use crate::ui::issue_end_edit::IssueEndEdit;
 use crate::ui::issue_start_edit::IssueStartEdit;
+use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::{Exit, ViewId};
 
 pub enum CurrentView {
@@ -45,12 +46,16 @@ impl CurrentView {
                 CurrentView::Fds(FastDayStart::for_work_day(settings, active_day))
             }
             ViewId::FastDayEnd => CurrentView::Fde(FastDayEnd::for_work_day(settings, active_day)),
-            ViewId::BookSingle => {
-                CurrentView::Bs(BookSingleUI::for_active_day(settings, recent_issues, active_day))
-            }
-            ViewId::BookIssueStart => {
-                CurrentView::Is(IssueStartEdit::for_active_day(settings, active_day))
-            }
+            ViewId::BookSingle => CurrentView::Bs(BookSingleUI::for_active_day(
+                settings,
+                recent_issues,
+                active_day,
+            )),
+            ViewId::BookIssueStart => CurrentView::Is(IssueStartEdit::for_active_day(
+                settings,
+                recent_issues,
+                active_day,
+            )),
             ViewId::BookIssueEnd => {
                 CurrentView::Ie(IssueEndEdit::for_active_day(settings, active_day))
             }
@@ -77,7 +82,7 @@ impl CurrentView {
                 CurrentView::Bs(ui)
             }
             Action::WorkStart(a) => {
-                let mut ui = IssueStartEdit::for_active_day(settings, active_day);
+                let mut ui = IssueStartEdit::for_active_day(settings, recent_issues, active_day);
                 ui.entry_to_edit(a);
                 CurrentView::Is(ui)
             }

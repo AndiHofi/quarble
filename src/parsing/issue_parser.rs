@@ -117,7 +117,7 @@ impl<'a> IssueParser for IssueParserWithRecent<'a> {
             IssueParsed {
                 r: recent.ok_or(()).into(),
                 input,
-                rest: "",
+                rest: rest(c, input),
             }
         } else {
             self.delegate.parse_task(input)

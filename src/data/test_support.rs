@@ -1,7 +1,7 @@
 use crate::data::*;
-use crate::parsing;
+use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
-use crate::parsing::time_limit::{TimeRange};
+use crate::parsing::time_limit::TimeRange;
 use crate::ui::fast_day_start::DayStartBuilder;
 use crate::util::{DefaultTimeline, TimelineProvider};
 use std::sync::Arc;
@@ -54,8 +54,11 @@ pub fn day_start(input: &str) -> Action {
 }
 
 pub fn day_end(input: &str) -> Action {
-    let timeline = Arc::new(DefaultTimeline);
-    parsing::parse_day_end(timeline.time_now(), input)
+    let (mut result, rest) = Time::parse_prefix(input);
+    if !rest.is_empty() {
+        result = ParseResult::Invalid(());
+    }
+    result
         .get()
         .map(|ts| Action::DayEnd(DayEnd { ts }))
         .unwrap()

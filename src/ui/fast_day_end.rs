@@ -2,15 +2,14 @@ use iced_wgpu::TextInput;
 use iced_winit::widget::{text_input, Column, Row, Text};
 
 use crate::conf::{Settings, SettingsRef};
-use crate::data::{Action, ActiveDay, DayEnd};
+use crate::data::{ActiveDay, DayEnd};
 use crate::parsing::parse_result::ParseResult;
+use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeRange, TimeResult};
-use crate::ui::stay_active::StayActive;
+use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::v_space;
-use crate::ui::{
-    day_info_message, style, unbooked_time, MainView, Message, QElement,
-};
+use crate::ui::{day_info_message, style, unbooked_time, MainView, Message, QElement};
 
 #[derive(Clone, Debug)]
 pub enum FastDayEndMessage {
@@ -54,30 +53,37 @@ impl FastDayEnd {
             settings,
         })
     }
+}
 
-    pub fn entry_to_edit(&mut self, to_edit: DayEnd) -> Option<Message> {
-        self.update_text(format!("{}", to_edit.ts));
-        self.original_entry = Some(to_edit);
-        None
-    }
+impl SingleEditUi<DayEnd> for FastDayEnd {
+    fn update_input(&mut self, input: String) {
+        self.text = input;
 
-    fn update_text(&mut self, new_value: String) -> Option<Message> {
-        self.parse_value(&new_value);
-        self.text = new_value;
-        self.value = self.builder.try_build();
-        None
-    }
-
-    fn parse_value(&mut self, text: &str) {
         self.bad_input = false;
 
-        let result = crate::parsing::parse_day_end(self.settings.load().timeline.time_now(), text);
+        let timeline = &self.settings.load().timeline;
+        let (mut result, rest) = Time::parse_with_offset(timeline, &self.text);
+        if !rest.trim_start().is_empty() {
+            result = ParseResult::Invalid(());
+        }
 
         let result = result
             .map_invalid(|_| InvalidTime::Bad)
             .and_then(|r| check_any_limit_overlaps(r, &self.limits));
 
         self.builder.ts = result;
+    }
+
+    fn as_text(&self, orig: &DayEnd) -> String {
+        orig.ts.to_string()
+    }
+
+    fn set_orig(&mut self, orig: DayEnd) {
+        self.original_entry = Some(orig);
+    }
+
+    fn try_build(&self) -> Option<DayEnd> {
+        self.builder.try_build()
     }
 }
 
@@ -92,9 +98,12 @@ impl MainView for FastDayEnd {
         Column::with_children(vec![
             self.top_bar.view(),
             v_space(style::SPACE),
-            TextInput::new(&mut self.text_state, "now", &self.text, move |input| {
-                on_input_change_message(input)
-            })
+            TextInput::new(
+                &mut self.text_state,
+                "now",
+                &self.text,
+                on_input_change_message,
+            )
             .into(),
             v_space(style::SPACE),
             Row::with_children(vec![Text::new(time_str).into()]).into(),
@@ -104,11 +113,12 @@ impl MainView for FastDayEnd {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::Fde(msg) => match msg {
-                FastDayEndMessage::TextChanged(new_value) => self.update_text(new_value),
-            },
+            Message::Fde(FastDayEndMessage::TextChanged(new_value)) => {
+                self.update_input(new_value);
+                None
+            }
             Message::SubmitCurrent(stay_active) => {
-                on_submit(stay_active, &mut self.original_entry, self.value.as_ref())
+                Self::on_submit_message(self.try_build(), &mut self.original_entry, stay_active)
             }
             Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
             _ => None,
@@ -118,26 +128,6 @@ impl MainView for FastDayEnd {
 
 fn on_input_change_message(text: String) -> Message {
     Message::Fde(FastDayEndMessage::TextChanged(text))
-}
-
-fn on_submit(
-    stay_active: StayActive,
-    orig_value: &mut Option<DayEnd>,
-    value: Option<&DayEnd>,
-) -> Option<Message> {
-    if let Some(v) = value {
-        if let Some(orig) = std::mem::take(orig_value) {
-            Some(Message::ModifyAction {
-                stay_active,
-                orig: Box::new(Action::DayEnd(orig)),
-                update: Box::new(Action::DayEnd(v.clone())),
-            })
-        } else {
-            Some(Message::StoreAction(stay_active, Action::DayEnd(v.clone())))
-        }
-    } else {
-        None
-    }
 }
 
 #[derive(Debug)]
@@ -153,32 +143,63 @@ impl DayEndBuilder {
 
 #[cfg(test)]
 mod test {
-    use chrono::Timelike;
+    use crate::data::test_support::time;
+    use crate::data::{Action, ActiveDay, DayEnd, Location};
 
-    use crate::conf::into_settings_ref;
     use crate::parsing::time::Time;
-    use crate::ui::fast_day_end::FastDayEnd;
-    use crate::util::{DefaultTimeline, TimelineProvider};
+    use crate::ui::fast_day_end::{FastDayEnd, FastDayEndMessage};
+    use crate::ui::single_edit_ui::SingleEditUi;
+    use crate::ui::stay_active::StayActive;
+    use crate::ui::{MainView, Message};
+    use crate::util::{StaticTimeline, TimelineProvider};
     use crate::Settings;
 
     #[test]
     fn test_parse_value() {
-        let c_time = DefaultTimeline.naive_now();
-        eprintln!("{:?}, {}, {}", c_time, c_time.hour(), c_time.minute());
-        let time: Time = c_time.into();
-        eprintln!("{}", time);
-        eprintln!("{}", Time::hm(1, 9));
         p(&[
-            "12", "12h", "12m", "+1h", "-1m", "-15", "-15", "+1h15m", "+0m ", "+1",
+            ("12", Some(time("12"))),
+            ("12h", None),
+            ("12m", None),
+            ("+1h", Some(time("13"))),
+            ("-1m", Some(time("11:59"))),
+            ("-15", Some(time("11:45"))),
+            ("+1h15m", Some(time("13:15"))),
+            ("+0m ", Some(time("12:00"))),
+            ("+1", Some(time("12:01"))),
         ])
     }
 
-    fn p(i: &[&str]) {
-        let settings = into_settings_ref(Settings::default());
-        let mut fde = FastDayEnd::for_work_day(settings, None);
-        for input in i {
-            fde.parse_value(input);
-            eprintln!("'{}' -> {:?}", input, fde.builder);
+    fn p(i: &[(&str, Option<Time>)]) {
+        let timeline = StaticTimeline::parse("2022-01-31 12:00");
+        let today = timeline.today();
+        let settings = Settings {
+            timeline: timeline.into(),
+            ..Settings::default()
+        }
+        .into_settings_ref();
+
+        let mut fde = FastDayEnd::for_work_day(
+            settings,
+            Some(&ActiveDay::new(today, Location::Office, None)),
+        );
+        for (input, expected_time) in i {
+            let expected = expected_time.map(|ts| DayEnd { ts });
+            let result = fde.convert_input(input);
+            assert_eq!(result, expected, "'{}' -> {:?}", input, result);
+        }
+
+        for (input, expected) in i {
+            fde.update(Message::Fde(FastDayEndMessage::TextChanged(
+                input.to_string(),
+            )));
+            let result = fde.update(Message::SubmitCurrent(StayActive::Yes));
+            match result {
+                Some(Message::StoreAction(_, Action::DayEnd(DayEnd { ts }))) => {
+                    assert_eq!(&Some(ts), expected, "For input {input}")
+                }
+                None => assert_eq!(&None, expected),
+                other => panic!("Unexpected: {:?}", other),
+            }
         }
     }
 }

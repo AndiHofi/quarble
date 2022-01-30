@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::conf::into_settings_ref;
+use crate::conf::{into_settings_ref, SettingsRef};
 use crate::data::test_support::time;
 use crate::data::{ActiveDayBuilder, JiraIssue, Location, RecentIssuesRef, Work};
 use crate::parsing::parse_result::ParseResult;
@@ -11,9 +11,10 @@ use crate::parsing::time::Time;
 use crate::parsing::{parse_issue_clipboard, JiraIssueParser};
 use crate::ui::book_single::{BookSingleMessage, BookSingleUI};
 use crate::ui::clip_read::ClipRead;
+use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::stay_active::StayActive;
 use crate::ui::{MainView, Message};
-use crate::util::{StaticTimeline};
+use crate::util::StaticTimeline;
 use crate::Settings;
 
 fn meeting() -> JiraIssue {
@@ -180,7 +181,7 @@ fn book_single_integration_test() {
     assert_eq!(bs.builder.msg.as_deref(), Some("comment1"));
 
     assert!(matches!(next_letter, None));
-    let on_submit = bs.on_submit(StayActive::Yes);
+    let on_submit = bs.update(Message::SubmitCurrent(StayActive::Yes));
     assert!(
         matches!(
             on_submit,
@@ -196,35 +197,7 @@ fn book_single_integration_test() {
 
 #[test]
 fn applies_recent_issues() {
-    let settings = into_settings_ref(Settings {
-        max_recent_issues: 10,
-        timeline: StaticTimeline::parse("2022-1-15 12:00").into(),
-        ..Default::default()
-    });
-
-    let recent = RecentIssuesRef::empty(settings.clone());
-    recent.issue_used_with_comment(
-        &JiraIssue {
-            ident: "RECENT-1".to_string(),
-            default_action: Some("Default action".to_string()),
-            description: Some("Description".to_string()),
-        },
-        None,
-    );
-
-    let mut ui = BookSingleUI::for_active_day(
-        settings.clone(),
-        recent.clone(),
-        Some(
-            &ActiveDayBuilder {
-                day: settings.load().timeline.today(),
-                main_location: Location::Office,
-                active_issue: None,
-                actions: vec![],
-            }
-            .build(),
-        ),
-    );
+    let (settings, _, mut ui) = setup_test_ui();
 
     ui.parse_input("10 11 r1");
 
@@ -242,4 +215,59 @@ fn applies_recent_issues() {
             description: "Default action".to_string()
         })
     )
+}
+
+#[test]
+fn can_adapt_recent_issue() {
+    let (settings, _, mut ui) = setup_test_ui();
+    ui.parse_input("10 11 r1 modified action");
+
+    let result = ui.builder.try_build(settings.load().timeline.time_now());
+    assert_eq!(
+        result,
+        Some(Work {
+            start: time("10"),
+            end: time("11"),
+            task: JiraIssue {
+                ident: "RECENT-1".to_string(),
+                description: Some("Description".to_string()),
+                default_action: Some("Default action".to_string())
+            },
+            description: "modified action".to_string()
+        })
+    )
+}
+
+fn setup_test_ui() -> (SettingsRef, RecentIssuesRef, Box<BookSingleUI>) {
+    let settings = into_settings_ref(Settings {
+        max_recent_issues: 10,
+        timeline: StaticTimeline::parse("2022-1-15 12:00").into(),
+        ..Default::default()
+    });
+
+    let recent = RecentIssuesRef::empty(settings.clone());
+    recent.issue_used_with_comment(
+        &JiraIssue {
+            ident: "RECENT-1".to_string(),
+            default_action: Some("Default action".to_string()),
+            description: Some("Description".to_string()),
+        },
+        None,
+    );
+
+    let ui = BookSingleUI::for_active_day(
+        settings.clone(),
+        recent.clone(),
+        Some(
+            &ActiveDayBuilder {
+                day: settings.load().timeline.today(),
+                main_location: Location::Office,
+                active_issue: None,
+                actions: vec![],
+            }
+            .build(),
+        ),
+    );
+
+    (settings, recent, ui)
 }

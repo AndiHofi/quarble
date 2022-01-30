@@ -2,11 +2,11 @@ use iced_native::widget::{text_input, Column, Row};
 use iced_wgpu::TextInput;
 
 use crate::conf::SettingsRef;
-use crate::data::{Action, ActiveDay, JiraIssue, WorkEnd};
+use crate::data::{ActiveDay, JiraIssue, WorkEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::{IssueParsed, IssueParser};
-use crate::ui::stay_active::StayActive;
+use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{day_info_message, style, text, time_info, MainView, Message, QElement};
@@ -53,17 +53,13 @@ impl IssueEndEdit {
             orig: None,
         })
     }
+}
 
-    pub fn entry_to_edit(&mut self, e: WorkEnd) {
-        let text = format!("{} {}", e.ts, e.task.ident);
-        self.parse_input(&text);
-        self.input = text;
-        self.orig = Some(e);
-    }
-
-    fn parse_input(&mut self, input: &str) {
+impl SingleEditUi<WorkEnd> for IssueEndEdit {
+    fn update_input(&mut self, input: String) {
+        self.input = input;
         let guard = self.settings.load();
-        let (time, input) = Time::parse_with_offset(&guard.timeline, input);
+        let (time, input) = Time::parse_with_offset(&guard.timeline, &self.input);
         self.time = time;
         let IssueParsed { r, rest, .. } = guard.issue_parser.parse_task(input.trim_start());
         if rest.is_empty() {
@@ -73,33 +69,27 @@ impl IssueEndEdit {
         }
     }
 
-    fn on_submit(&mut self, stay_active: StayActive) -> Option<Message> {
+    fn as_text(&self, e: &WorkEnd) -> String {
+        format!("{} {}", e.ts, e.task.ident)
+    }
+
+    fn set_orig(&mut self, orig: WorkEnd) {
+        self.orig = Some(orig)
+    }
+
+    fn try_build(&self) -> Option<WorkEnd> {
         let issue = match &self.issue {
             ParseResult::None => self.default_issue.clone(),
             ParseResult::Valid(i) => Some(i.clone()),
             _ => None,
         };
 
-        let action = match (issue, self.time.as_ref()) {
+        match (issue, self.time.as_ref()) {
             (Some(task), ParseResult::Valid(time)) => {
                 let action = WorkEnd { task, ts: *time };
-                Some(Action::WorkEnd(action))
+                Some(action)
             }
             _ => None,
-        };
-
-        if let Some(action) = action {
-            if let Some(orig) = std::mem::take(&mut self.orig) {
-                Some(Message::ModifyAction {
-                    stay_active,
-                    orig: Box::new(Action::WorkEnd(orig)),
-                    update: Box::new(action),
-                })
-            } else {
-                Some(Message::StoreAction(stay_active, action))
-            }
-        } else {
-            None
         }
     }
 }
@@ -143,11 +133,12 @@ impl MainView for IssueEndEdit {
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Ie(IssueEndMessage::InputChanged(text)) => {
-                self.parse_input(&text);
-                self.input = text;
+                self.update_input(text);
                 None
             }
-            Message::SubmitCurrent(stay_active) => self.on_submit(stay_active),
+            Message::SubmitCurrent(stay_active) => {
+                Self::on_submit_message(self.try_build(), &mut self.orig, stay_active)
+            }
             Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
             _ => None,
         }
@@ -177,7 +168,7 @@ mod test {
         )));
         assert!(matches!(on_input, None));
 
-        let on_submit = ui.on_submit(StayActive::Yes);
+        let on_submit = ui.update(Message::SubmitCurrent(StayActive::Yes));
         assert!(matches!(
             on_submit,
             Some(Message::StoreAction(

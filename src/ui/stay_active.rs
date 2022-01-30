@@ -16,15 +16,14 @@ impl Default for StayActive {
 
 impl StayActive {
     pub fn apply_settings(self, settings: &Settings) -> Self {
-        match self {
-            StayActive::Default => {
-                if settings.close_on_safe {
-                    StayActive::No
-                } else {
-                    StayActive::Yes
-                }
+        if matches!(self, StayActive::Default) {
+            if settings.close_on_safe {
+                StayActive::No
+            } else {
+                StayActive::Yes
             }
-            v => v,
+        } else {
+            self
         }
     }
 

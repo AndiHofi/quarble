@@ -1,14 +1,14 @@
-use iced_wgpu::TextInput;
-use iced_winit::widget::{text_input, Column, Row, Space, Text};
-
 use crate::conf::{Settings, SettingsRef};
-use crate::data::{Action, ActiveDay, DayStart, Location};
+use crate::data::{ActiveDay, DayStart, Location};
 use crate::parsing::parse_result::ParseResult;
+use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeRange, TimeResult};
-use crate::ui::stay_active::StayActive;
+use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::top_bar::TopBar;
 use crate::ui::{day_info_message, style, unbooked_time, MainView, Message, QElement};
 use crate::util::Timeline;
+use iced_wgpu::TextInput;
+use iced_winit::widget::{text_input, Column, Row, Space, Text};
 
 #[derive(Clone, Debug)]
 pub enum FastDayStartMessage {
@@ -52,68 +52,30 @@ impl FastDayStart {
             orig: None,
         })
     }
+}
 
-    pub fn entry_to_edit(&mut self, e: DayStart) {
+impl SingleEditUi<DayStart> for FastDayStart {
+    fn update_input(&mut self, input: String) {
+        self.text = input;
+        self.builder
+            .parse_value(&self.timeline, &self.limits, &self.text);
+    }
+
+    fn as_text(&self, e: &DayStart) -> String {
         let loc = match e.location {
             Location::Office => "o",
             Location::Home => "h",
             Location::Other(ref l) => l.0.as_str(),
         };
-        self.update_text(format!("{} {}", loc, e.ts));
-        self.orig = Some(e);
+        format!("{} {}", loc, e.ts)
     }
 
-    fn update_text(&mut self, new_value: String) -> Option<Message> {
-        self.builder
-            .parse_value(&self.timeline, &self.limits, &new_value);
-        self.text = new_value;
-        self.value = self.builder.try_build(&self.timeline);
-        None
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct DayStartBuilder {
-    location: ParseResult<Location, ()>,
-    ts: TimeResult,
-}
-
-impl DayStartBuilder {
-    pub fn try_build(&self, timeline: &Timeline) -> Option<DayStart> {
-        let location = self.location.clone().or_default().get();
-        let ts = self.ts.clone().or(timeline.time_now()).get();
-
-        if let (Some(location), Some(ts)) = (location, ts) {
-            Some(DayStart { location, ts })
-        } else {
-            None
-        }
+    fn set_orig(&mut self, orig: DayStart) {
+        self.orig = Some(orig)
     }
 
-    pub fn parse_value(&mut self, timeline: &Timeline, limits: &[TimeRange], text: &str) {
-        fn parse_location(text: &str) -> (ParseResult<Location, ()>, &str) {
-            let text = text.trim();
-            let (location, text) = if text.starts_with(&['h', 'H'][..]) {
-                (ParseResult::Valid(Location::Home), (&text[1..]).trim())
-            } else if text.starts_with(&['o', 'O'][..]) {
-                (ParseResult::Valid(Location::Office), (&text[1..]).trim())
-            } else {
-                (ParseResult::None, text)
-            };
-            (location, text)
-        }
-
-        let (location, text) = parse_location(text);
-
-        self.location = location;
-
-        let result = crate::parsing::parse_day_end(timeline.time_now(), text);
-
-        let result = result
-            .map_invalid(|_| InvalidTime::Bad)
-            .and_then(|r| check_any_limit_overlaps(r, limits));
-
-        self.ts = result;
+    fn try_build(&self) -> Option<DayStart> {
+        self.builder.try_build(&self.timeline)
     }
 }
 
@@ -154,11 +116,12 @@ impl MainView for FastDayStart {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::Fds(msg) => match msg {
-                FastDayStartMessage::TextChanged(new_value) => self.update_text(new_value),
-            },
+            Message::Fds(FastDayStartMessage::TextChanged(new_value)) => {
+                self.update_input(new_value);
+                None
+            }
             Message::SubmitCurrent(stay_active) => {
-                on_submit(stay_active, &mut self.orig, self.value.as_ref())
+                Self::on_submit_message(self.try_build(), &mut self.orig, stay_active)
             }
             Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
             _ => None,
@@ -166,62 +129,127 @@ impl MainView for FastDayStart {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct DayStartBuilder {
+    location: ParseResult<Location, ()>,
+    ts: TimeResult,
+}
+
+impl DayStartBuilder {
+    pub fn try_build(&self, timeline: &Timeline) -> Option<DayStart> {
+        let location = self.location.clone().or_default().get();
+
+        let ts = self.ts.clone().or(timeline.time_now()).get();
+
+        if let (Some(location), Some(ts)) = (location, ts) {
+            Some(DayStart { location, ts })
+        } else {
+            None
+        }
+    }
+
+    pub fn parse_value(&mut self, timeline: &Timeline, limits: &[TimeRange], text: &str) {
+        fn parse_location(text: &str) -> (ParseResult<Location, ()>, &str) {
+            let text = text.trim();
+            let (location, text) = if text.starts_with(&['h', 'H'][..]) {
+                (ParseResult::Valid(Location::Home), (&text[1..]).trim())
+            } else if text.starts_with(&['o', 'O'][..]) {
+                (ParseResult::Valid(Location::Office), (&text[1..]).trim())
+            } else {
+                (ParseResult::None, text)
+            };
+            (location, text)
+        }
+
+        let (location, text) = parse_location(text);
+
+        self.location = location;
+
+        let (mut result, rest) = Time::parse_with_offset(timeline, text);
+        if !rest.trim_start().is_empty() {
+            result = ParseResult::Invalid(())
+        };
+
+        let result = result
+            .map_invalid(|_| InvalidTime::Bad)
+            .and_then(|r| check_any_limit_overlaps(r, limits));
+
+        self.ts = result;
+    }
+}
+
 fn on_input_change(text: String) -> Message {
     Message::Fds(FastDayStartMessage::TextChanged(text))
 }
 
-fn on_submit(
-    stay_active: StayActive,
-    orig: &mut Option<DayStart>,
-    value: Option<&DayStart>,
-) -> Option<Message> {
-    if let Some(value) = value {
-        let value = Action::DayStart(value.clone());
-        if let Some(orig) = std::mem::take(orig) {
-            Some(Message::ModifyAction {
-                stay_active,
-                orig: Box::new(Action::DayStart(orig)),
-                update: Box::new(value),
-            })
-        } else {
-            Some(Message::StoreAction(stay_active, value))
-        }
-    } else {
-        None
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
     use crate::conf::into_settings_ref;
-    use crate::ui::fast_day_start::FastDayStart;
-    use crate::util::StaticTimeline;
+    use crate::data::test_support::time;
+    use crate::data::Location::*;
+    use crate::data::{Action, ActiveDay, DayStart, Location};
+    use crate::ui::fast_day_start::{FastDayStart, FastDayStartMessage};
+    use crate::ui::single_edit_ui::SingleEditUi;
+    use crate::ui::stay_active::StayActive;
+    use crate::ui::{MainView, Message};
+    use crate::util::{StaticTimeline, TimelineProvider};
     use crate::Settings;
+    use std::sync::Arc;
 
     #[test]
     fn test_parse_value() {
+        let r = |l, t| {
+            Some(DayStart {
+                location: l,
+                ts: time(t),
+            })
+        };
+
         p(&[
-            "h12", "h12h", "h12m", "h+1h", "h-1m", "h-15", "-15", "o +1h15m", "h+0m ", "h+1",
+            ("h12", r(Home, "12")),
+            ("h12h", None),
+            ("o12m", None),
+            ("h+12m", r(Home, "12:12")),
+            ("o+12m", r(Office, "12:12")),
+            ("h+1h", r(Home, "13")),
+            ("h-1m", r(Home, "11:59")),
+            ("h-15", r(Home, "11:45")),
+            ("-15", r(Office, "11:45")),
+            ("o +1h15m", r(Office, "13:15")),
+            ("h+0m ", r(Home, "12")),
+            ("h+1", r(Home, "12:01")),
         ])
     }
 
-    fn p(i: &[&str]) {
-        let timeline = StaticTimeline::parse("2021-12-29 10:00");
-
+    fn p(i: &[(&str, Option<DayStart>)]) {
+        let timeline = StaticTimeline::parse("2021-12-29 12:00");
+        let today = timeline.today();
         let settings = into_settings_ref(Settings {
             timeline: Arc::new(timeline),
             ..Settings::default()
         });
-        for input in i {
-            let mut fds = FastDayStart::for_work_day(settings.clone(), None);
-            fds.builder.parse_value(&fds.timeline, &fds.limits, *input);
+        let mut fds = FastDayStart::for_work_day(
+            settings,
+            Some(&ActiveDay::new(today, Location::Office, None)),
+        );
+        for (input, expected) in i {
+            let result = fds.convert_input(*input);
 
-            eprintln!(
-                "'{}' -> {:?}",
-                input,
-                fds.builder.try_build(&settings.load().timeline)
-            );
+            assert_eq!(&result, expected, "For input '{input}'");
+        }
+
+        for (input, expected) in i {
+            fds.update(Message::Fds(FastDayStartMessage::TextChanged(
+                input.to_string(),
+            )));
+            let result = fds.update(Message::SubmitCurrent(StayActive::Yes));
+            match result {
+                Some(Message::StoreAction(_, Action::DayStart(result))) => {
+                    assert_eq!(&Some(result), expected, "For input {input}")
+                }
+                None => assert_eq!(&None, expected, "For input {input}"),
+                r => panic!("Unexpected for input {input}: {r:?}"),
+            }
         }
     }
 }

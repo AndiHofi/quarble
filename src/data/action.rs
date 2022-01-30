@@ -261,3 +261,33 @@ pub struct Doctor {
     pub start: Time,
     pub end: Time,
 }
+
+impl From<Work> for Action {
+    fn from(w: Work) -> Self {
+        Action::Work(w)
+    }
+}
+
+impl From<WorkStart> for Action {
+    fn from(s: WorkStart) -> Self {
+        Action::WorkStart(s)
+    }
+}
+
+impl From<WorkEnd> for Action {
+    fn from(e: WorkEnd) -> Self {
+        Action::WorkEnd(e)
+    }
+}
+
+impl From<DayStart> for Action {
+    fn from(s: DayStart) -> Self {
+        Action::DayStart(s)
+    }
+}
+
+impl From<DayEnd> for Action {
+    fn from(e: DayEnd) -> Self {
+        Action::DayEnd(e)
+    }
+}

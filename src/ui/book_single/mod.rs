@@ -5,11 +5,11 @@ use iced_winit::widget::{text_input, Column};
 use parsing::WorkBuilder;
 
 use crate::conf::{Settings, SettingsRef};
-use crate::data::{Action, ActiveDay, JiraIssue, RecentIssuesRef, Work};
+use crate::data::{ActiveDay, JiraIssue, RecentIssuesRef, Work};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::ui::clip_read::ClipRead;
-use crate::ui::stay_active::StayActive;
+use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{day_info_message, style, text, time_info, MainView, Message, QElement};
@@ -32,14 +32,30 @@ pub struct BookSingleUI {
     last_end: Option<Time>,
 }
 
-impl BookSingleUI {
-    fn parse_input(&mut self, text: &str) {
+impl SingleEditUi<Work> for BookSingleUI {
+    fn update_input(&mut self, input: String) {
+        self.input = input;
         let recent = self.recent_issues.borrow();
 
         self.builder
-            .parse_input(&self.settings.load(), &recent, self.last_end, text)
+            .parse_input(&self.settings.load(), &recent, self.last_end, &self.input)
     }
 
+    fn as_text(&self, e: &Work) -> String {
+        format!("{} {} {} {}", e.start, e.end, e.task.ident, e.description)
+    }
+
+    fn set_orig(&mut self, orig: Work) {
+        self.orig = Some(orig);
+    }
+
+    fn try_build(&self) -> Option<Work> {
+        let now = self.settings.load().timeline.time_now();
+        self.builder.try_build(now)
+    }
+}
+
+impl BookSingleUI {
     pub fn for_active_day(
         settings: SettingsRef,
         recent_issues: RecentIssuesRef,
@@ -65,38 +81,10 @@ impl BookSingleUI {
         })
     }
 
-    pub fn entry_to_edit(&mut self, e: Work) {
-        let text = format!("{} {} {} {}", e.start, e.end, e.task.ident, e.description);
-        self.parse_input(&text);
-        self.input = text;
-        self.orig = Some(e);
-    }
-
     fn follow_up_msg(&mut self) -> Option<Message> {
         if self.builder.needs_clipboard() {
             self.builder.clipboard_reading = ClipRead::Reading;
             Some(Message::ReadClipboard)
-        } else {
-            None
-        }
-    }
-
-    fn on_submit(&mut self, stay_active: StayActive) -> Option<Message> {
-        let action = self
-            .builder
-            .try_build(self.settings.load().timeline.time_now())
-            .map(Action::Work);
-
-        if let Some(action) = action {
-            if let Some(orig) = std::mem::take(&mut self.orig) {
-                Some(Message::ModifyAction {
-                    stay_active,
-                    orig: Box::new(Action::Work(orig)),
-                    update: Box::new(action),
-                })
-            } else {
-                Some(Message::StoreAction(stay_active, action))
-            }
         } else {
             None
         }
@@ -148,15 +136,16 @@ impl MainView for BookSingleUI {
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Bs(BookSingleMessage::TextChanged(msg)) => {
-                self.parse_input(&msg);
-                self.input = msg;
+                self.update_input(msg);
                 self.follow_up_msg()
             }
             Message::ClipboardValue(v) => {
                 self.builder.apply_clipboard(v);
                 None
             }
-            Message::SubmitCurrent(stay_active) => self.on_submit(stay_active),
+            Message::SubmitCurrent(stay_active) => {
+                Self::on_submit_message(self.try_build(), &mut self.orig, stay_active)
+            }
             Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
             _ => self.follow_up_msg(),
         }

@@ -45,6 +45,10 @@ impl Settings {
             Self::default()
         }
     }
+
+    pub fn into_settings_ref(self) -> SettingsRef {
+        into_settings_ref(self)
+    }
 }
 
 pub type SettingsRef = Rc<ArcSwap<Settings>>;
