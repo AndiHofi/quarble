@@ -73,7 +73,7 @@ pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     };
     iced_winit::application::run_with_window_configurator::<
         Quarble,
-        iced_futures::executor::ThreadPool,
+        iced_futures::backend::default::Executor,
         iced_wgpu::window::Compositor,
         _,
     >(main_action, renderer_settings, window_configurator, true)

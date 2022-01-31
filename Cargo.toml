@@ -28,7 +28,7 @@ iced_core = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes"
 iced_native = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }
 iced_winit = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }
 iced_wgpu = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }
-iced_futures = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes" }
+iced_futures = { git = "https://github.com/AndiHofi/iced", branch = "tmenu_changes", features = ["smol"] }
 
 [dependencies.tracing-subscriber]
 version = "0.2"
