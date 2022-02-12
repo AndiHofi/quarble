@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use arc_swap::ArcSwap;
+use iced_core::alignment::Vertical;
 use iced_core::{Color, Padding};
 use iced_native::clipboard;
 use iced_wgpu::Text;
@@ -91,6 +92,7 @@ pub struct Quarble {
     tab_bar: TabBar,
     recent_issues: RecentIssuesRef,
     recent_view: RecentIssuesView,
+    current_error: String,
 }
 
 impl iced_winit::Program for Quarble {
@@ -101,7 +103,7 @@ impl iced_winit::Program for Quarble {
         let mut message = Some(message);
         while let Some(current) = message.take() {
             match current {
-                Message::Error(msg) => eprintln!("Got an error: {}", msg),
+                Message::Error(msg) => self.current_error = msg,
                 Message::Exit => {
                     self.tab_bar.set_active_view(ViewId::CurrentDayUi);
                     self.current_view = CurrentView::Exit(Exit);
@@ -309,10 +311,28 @@ impl iced_winit::Program for Quarble {
             CurrentView::Ie(ie) => ie.view(&settings),
             CurrentView::Export(ex) => ex.view(&settings),
         };
-        let element = Container::new(content)
-            .padding(Padding::new(style::WINDOW_PADDING))
-            .into();
-        let mut main = Column::with_children(vec![self.tab_bar.view(), element]);
+        let element = Container::new(content).padding(Padding::new(style::WINDOW_PADDING));
+
+        let mut main = Column::new();
+        main = main.push(self.tab_bar.view());
+        if !self.current_error.is_empty() {
+            main = main.push(
+                Container::new(
+                    Text::new(&self.current_error)
+                        .color(style::ERROR_COLOR)
+                        .size(20),
+                )
+                .padding([
+                    style::WINDOW_PADDING,
+                    style::WINDOW_PADDING,
+                    0,
+                    style::WINDOW_PADDING,
+                ])
+                .align_y(Vertical::Bottom),
+            )
+        }
+
+        main = main.push(element);
         if view_id.show_recent() {
             main = main
                 .push(v_space(style::SPACE))
@@ -363,6 +383,7 @@ impl iced_winit::Application for Quarble {
             tab_bar: TabBar::new(flags.initial_view),
             recent_view,
             recent_issues,
+            current_error: String::new(),
         };
 
         let command = if let Some(initial_message) = initial_message {

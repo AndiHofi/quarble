@@ -15,7 +15,7 @@ pub const WINDOW_PADDING: u16 = 10;
 pub const TAB_SPACE: Length = Length::Units(3);
 
 pub const HIGHLIGHT_COLOR: Color = Color::from_rgb(0.95, 0.95, 1.0);
-
+pub const ERROR_COLOR: Color = Color::from_rgb(0.5, 0.0, 0.0);
 const MAIN_COLOR: Color = Color {
     r: 0.8,
     g: 0.8,
@@ -48,11 +48,13 @@ impl container::StyleSheet for ContentStyle {
 }
 
 pub enum RowState {
-    Even, Odd, Selected
+    Even,
+    Odd,
+    Selected,
 }
 
-pub struct ContentRow{
-    pub state: RowState
+pub struct ContentRow {
+    pub state: RowState,
 }
 
 impl container::StyleSheet for ContentRow {
@@ -70,7 +72,6 @@ impl container::StyleSheet for ContentRow {
         }
     }
 }
-
 
 pub struct EditButton;
 

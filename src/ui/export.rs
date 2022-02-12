@@ -22,6 +22,7 @@ pub struct DayExportUi {
     actions: Vec<Action>,
     export_text: Option<Arc<String>>,
     msg: Option<String>,
+    error: String,
     clip_button: button::State,
     settings: SettingsRef,
     combine_bookings: bool,
@@ -40,6 +41,7 @@ impl DayExportUi {
             actions: Vec::new(),
             export_text: None,
             msg: None,
+            error: String::new(),
             clip_button: button::State::new(),
             settings,
             combine_bookings,
@@ -81,8 +83,17 @@ impl DayExportUi {
 
         self.normalized = normalized;
         self.actions = actions;
-        self.msg = error;
+        self.error = error.unwrap_or_default();
         self.export_text = export_text;
+    }
+
+    fn follow_up(&mut self) -> Option<Message> {
+        let err = std::mem::take(&mut self.error);
+        if !err.is_empty() {
+            Some(Message::Error(err))
+        } else {
+            None
+        }
     }
 }
 
@@ -123,7 +134,9 @@ impl MainView for DayExportUi {
 
         let body = Row::with_children(vec![scroll.into(), h_space(style::SPACE), buttons.into()]);
 
-        Column::with_children(vec![top_row.into(), v_space(style::SPACE), body.into()]).into()
+        Column::with_children(vec![top_row.into(), v_space(style::SPACE), body.into()])
+            .height(Length::Fill)
+            .into()
     }
 
     fn update(&mut self, msg: Message) -> Option<Message> {
@@ -131,7 +144,8 @@ impl MainView for DayExportUi {
             Message::Export(DayExportMessage::ChangeNormalize(combine)) => {
                 self.combine_bookings = combine;
                 self.normalize_day();
-                None
+
+                self.follow_up()
             }
             Message::Export(DayExportMessage::TriggerExport) => match self.export_text {
                 Some(ref t) => {
@@ -141,10 +155,10 @@ impl MainView for DayExportUi {
                 }
                 None => {
                     self.msg = Some("Nothing to export".to_string());
-                    None
+                    self.follow_up()
                 }
             },
-            _ => None,
+            _ => self.follow_up(),
         }
     }
 }
