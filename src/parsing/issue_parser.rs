@@ -42,6 +42,14 @@ impl JiraIssueParser {
     pub fn shortcuts(&self) -> &BTreeMap<char, JiraIssue> {
         &self.shortcuts
     }
+    
+    pub fn valid_id(text: &str) -> bool {
+        if let Some(c) = ISSUE.captures(text) {
+            rest(c, text).is_empty()
+        } else { 
+            false
+        }
+    } 
 }
 
 impl IssueParser for JiraIssueParser {

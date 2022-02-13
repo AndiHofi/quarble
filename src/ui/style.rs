@@ -1,6 +1,6 @@
 use iced_core::{Background, Color, Font, Vector};
 use iced_native::widget::container::Style;
-use iced_native::widget::{button, container, Button};
+use iced_native::widget::{button, container, text_input, Button};
 use iced_winit::Length;
 
 pub const LABEL_WIDTH: Length = Length::Units(28);
@@ -13,9 +13,17 @@ pub const DSPACE: Length = Length::Units(2 * SPACE_PX);
 pub const MIN_WIDGET_WIDTH: Length = Length::Units(200);
 pub const WINDOW_PADDING: u16 = 10;
 pub const TAB_SPACE: Length = Length::Units(3);
+pub const TEXT_INPUT_PADDING: iced_core::Padding = iced_core::Padding {
+    top: 3,
+    right: 5,
+    bottom: 3,
+    left: 5,
+};
+pub const FONT_SIZE: u16 = 16;
 
 pub const HIGHLIGHT_COLOR: Color = Color::from_rgb(0.95, 0.95, 1.0);
 pub const ERROR_COLOR: Color = Color::from_rgb(0.5, 0.0, 0.0);
+pub const ERROR_COLOR_FOCUSSED: Color = Color::from_rgb(0.9, 0.0, 0.0);
 const MAIN_COLOR: Color = Color {
     r: 0.8,
     g: 0.8,
@@ -85,6 +93,59 @@ impl button::StyleSheet for EditButton {
             border_color: MAIN_COLOR,
             text_color: TEXT_MAIN_COLOR,
         }
+    }
+}
+
+pub struct TextInput {
+    pub error: bool,
+}
+
+const DEFAULT_TI_STYLE: text_input::Style = text_input::Style {
+    background: Background::Color(Color::WHITE),
+    border_radius: 5.0,
+    border_width: 1.0,
+    border_color: Color::from_rgb(0.7, 0.7, 0.7),
+};
+
+impl text_input::StyleSheet for TextInput {
+    fn active(&self) -> text_input::Style {
+        if self.error {
+            text_input::Style {
+                border_color: ERROR_COLOR,
+                ..DEFAULT_TI_STYLE
+            }
+        } else {
+            text_input::Style {
+                border_color: Color::from_rgb(0.7, 0.7, 0.7),
+                ..DEFAULT_TI_STYLE
+            }
+        }
+    }
+
+    fn focused(&self) -> text_input::Style {
+        if self.error {
+            text_input::Style {
+                border_color: ERROR_COLOR_FOCUSSED,
+                ..DEFAULT_TI_STYLE
+            }
+        } else {
+            text_input::Style {
+                border_color: Color::from_rgb(0.5, 0.5, 0.5),
+                ..DEFAULT_TI_STYLE
+            }
+        }
+    }
+
+    fn placeholder_color(&self) -> Color {
+        Color::from_rgb(0.7, 0.7, 0.7)
+    }
+
+    fn value_color(&self) -> Color {
+        Color::BLACK
+    }
+
+    fn selection_color(&self) -> Color {
+        Color::from_rgb(0.8, 0.8, 1.0)
     }
 }
 

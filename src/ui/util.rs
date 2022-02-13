@@ -67,22 +67,42 @@ pub(super) fn valid_base_time(input: &str) -> (bool, Option<u32>) {
     (false, None)
 }
 
-pub(in crate::ui) fn focus_next_ed(items: &mut [&mut text_input::State]) -> Option<Message> {
+pub(in crate::ui) fn focus_next_ed(
+    items: &mut [&mut text_input::State],
+    rotate: bool,
+) -> Option<Message> {
     if items.is_empty() {
         return None;
     }
 
     for w in 0..items.len() - 1 {
-        eprintln!("Item {} has focus: {}", w, items[w].is_focused());
         if items[w].is_focused() {
             items[w].unfocus();
             items[w + 1].focus();
+            items[w + 1].select_all();
             return None;
         }
     }
-    if let Some(last) = items.last_mut() {
-        last.unfocus();
-        return Some(Message::Down);
+
+    let is_last = {
+        let last = items.last_mut().unwrap();
+        if last.is_focused() {
+            last.unfocus();
+            true
+        } else {
+            false
+        }
+    };
+
+    if is_last {
+        return if rotate {
+            let first = items.first_mut().unwrap();
+            first.focus();
+            first.select_all();
+            None
+        } else {
+            Some(Message::Down)
+        };
     }
 
     None
@@ -96,23 +116,40 @@ pub(in crate::ui) fn h_space<'a>(l: Length) -> QElement<'a> {
     iced_winit::widget::Space::with_width(l).into()
 }
 
-pub(in crate::ui) fn focus_previous(items: &mut [&mut text_input::State]) -> Option<Message> {
+pub(in crate::ui) fn focus_previous(
+    items: &mut [&mut text_input::State],
+    rotate: bool,
+) -> Option<Message> {
     if items.is_empty() {
         return None;
     }
 
-    if let Some(first) = items.first_mut() {
+    let on_first: bool = {
+        let first = items.first_mut().unwrap();
         if first.is_focused() {
             first.unfocus();
-            return Some(Message::Down);
+            true
+        } else {
+            false
         }
+    };
+
+    if on_first {
+        return if rotate {
+            let last = items.last_mut().unwrap();
+            last.focus();
+            last.select_all();
+            None
+        } else {
+            Some(Message::Up)
+        };
     }
 
     for w in 1..items.len() {
-        eprintln!("Item {} has focus: {}", w, items[w].is_focused());
         if items[w].is_focused() {
             items[w].unfocus();
             items[w - 1].focus();
+            items[w - 1].select_all();
             return None;
         }
     }

@@ -14,6 +14,7 @@ pub struct TabBar {
     book_issue_start: button::State,
     book_issue_end: button::State,
     export: button::State,
+    settings: button::State,
     exit: button::State,
 }
 
@@ -29,6 +30,7 @@ impl TabBar {
             book_issue_start: Default::default(),
             book_issue_end: Default::default(),
             export: Default::default(),
+            settings: Default::default(),
             exit: Default::default(),
         }
     }
@@ -81,6 +83,8 @@ impl TabBar {
             ),
             h_space(style::TAB_SPACE),
             tab_button(active, &mut self.export, "Export (x)", ViewId::Export),
+            h_space(style::TAB_SPACE),
+            tab_button(active, &mut self.settings, "Settings (t)", ViewId::Settings),
             h_space(Length::Fill),
             tab_button(active, &mut self.exit, "x", ViewId::Exit),
             h_space(style::TAB_SPACE),
@@ -95,7 +99,9 @@ impl TabBar {
             .enumerate()
             .find(|(_, id)| **id == self.active_view)
         {
-            ViewId::TAB_ORDER.get((index + 1) % ViewId::TAB_ORDER.len()).cloned()
+            ViewId::TAB_ORDER
+                .get((index + 1) % ViewId::TAB_ORDER.len())
+                .cloned()
         } else {
             None
         }

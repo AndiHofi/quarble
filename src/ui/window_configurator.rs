@@ -46,7 +46,7 @@ impl<'a, A> iced_winit::window_configurator::WindowConfigurator<A> for MyWindowC
         let is_wayland = is_wayland(window_target);
 
         let size: LogicalSize<f64> = monitor.size().to_logical(monitor.scale_factor());
-        let window_size = LogicalSize::new((size.width / 2.0).max(800.0).min(2000.0), 300.0);
+        let window_size = LogicalSize::new((size.width / 2.0).max(800.0).min(2000.0), 400.0);
         if is_wayland {
             window_builder
                 .with_resizable(true)

@@ -7,6 +7,7 @@ use crate::ui::fast_day_end::FastDayEnd;
 use crate::ui::fast_day_start::FastDayStart;
 use crate::ui::issue_end_edit::IssueEndEdit;
 use crate::ui::issue_start_edit::IssueStartEdit;
+use crate::ui::settings_ui::SettingsUI;
 use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::{Exit, ViewId};
 
@@ -18,6 +19,7 @@ pub enum CurrentView {
     Is(Box<IssueStartEdit>),
     Ie(Box<IssueEndEdit>),
     Export(Box<DayExportUi>),
+    Settings(Box<SettingsUI>),
     Exit(Exit),
 }
 
@@ -31,6 +33,7 @@ impl CurrentView {
             CurrentView::Is(_) => ViewId::BookIssueStart,
             CurrentView::Ie(_) => ViewId::BookIssueEnd,
             CurrentView::Export(_) => ViewId::Export,
+            CurrentView::Settings(_) => ViewId::Settings,
             CurrentView::Exit(_) => ViewId::Exit,
         }
     }
@@ -65,6 +68,7 @@ impl CurrentView {
             ViewId::Export => {
                 CurrentView::Export(DayExportUi::for_active_day(settings, active_day))
             }
+            ViewId::Settings => CurrentView::Settings(SettingsUI::new(settings)),
             ViewId::Exit => CurrentView::Exit(Exit),
         }
     }

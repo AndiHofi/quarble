@@ -14,8 +14,8 @@ use tracing::{debug, error, info, span};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
-use crate::conf::{into_settings_ref, Settings};
 use crate::conf::SettingsSer;
+use crate::conf::{into_settings_ref, Settings};
 use crate::ui::main_action::{CmdId, InitialAction, MainAction};
 use crate::ui::ViewId;
 
@@ -152,7 +152,10 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
         debug: bool,
     }
 
-    let mut b: SettingsBuilder = SettingsBuilder::default();
+    let mut b = SettingsBuilder {
+        write_settings: true,
+        ..Default::default()
+    };
     loop {
         match remaining_args {
             ["-C" | "--config-file", config_file, rest @ ..] => {
@@ -168,8 +171,8 @@ fn parse_settings<'a>(args: &'a [&'a str]) -> anyhow::Result<(Settings, &'a [&'a
                 b.db_dir = Some(PathBuf::from(db_dir));
                 remaining_args = rest;
             }
-            ["-W" | "--write-settings", rest @ ..] => {
-                b.write_settings = true;
+            ["-W" | "--no_write-settings", rest @ ..] => {
+                b.write_settings = false;
                 remaining_args = rest;
             }
             ["--debug", rest @ ..] => {

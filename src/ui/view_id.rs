@@ -7,6 +7,7 @@ pub enum ViewId {
     FastDayStart,
     FastDayEnd,
     Export,
+    Settings,
     Exit,
 }
 
@@ -19,6 +20,7 @@ impl ViewId {
         Self::BookIssueStart,
         Self::BookIssueEnd,
         Self::Export,
+        Self::Settings,
     ];
 
     pub fn show_recent(self) -> bool {

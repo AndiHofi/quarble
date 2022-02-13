@@ -48,6 +48,7 @@ mod keyboard_handler;
 pub mod main_action;
 mod message;
 mod recent_issues_view;
+mod settings_ui;
 mod single_edit_ui;
 mod stay_active;
 mod style;
@@ -69,7 +70,7 @@ pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     };
     let renderer_settings = iced_wgpu::Settings {
         antialiasing: Some(iced_wgpu::settings::Antialiasing::MSAAx4),
-        default_text_size: 18,
+        default_text_size: 16,
         ..iced_wgpu::Settings::from_env()
     };
     iced_winit::application::run_with_window_configurator::<
@@ -96,7 +97,7 @@ pub struct Quarble {
 }
 
 impl iced_winit::Program for Quarble {
-    type Renderer = iced_wgpu::Renderer;
+    type Renderer = QRenderer;
     type Message = Message;
 
     fn update(&mut self, message: Message) -> Command<Message> {
@@ -291,6 +292,9 @@ impl iced_winit::Program for Quarble {
                     CurrentView::Export(ex) => {
                         message = ex.update(m);
                     }
+                    CurrentView::Settings(s) => {
+                        message = s.update(m);
+                    }
                     _ => {}
                 },
             }
@@ -310,6 +314,7 @@ impl iced_winit::Program for Quarble {
             CurrentView::Is(is) => is.view(&settings),
             CurrentView::Ie(ie) => ie.view(&settings),
             CurrentView::Export(ex) => ex.view(&settings),
+            CurrentView::Settings(s) => s.view(&settings),
         };
         let element = Container::new(content).padding(Padding::new(style::WINDOW_PADDING));
 
@@ -434,6 +439,7 @@ trait MainView {
 }
 
 type QElement<'a> = Element<'a, Message, <Quarble as iced_winit::Program>::Renderer>;
+type QRenderer = iced_wgpu::Renderer;
 
 pub struct Exit;
 

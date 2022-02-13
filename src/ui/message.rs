@@ -8,6 +8,7 @@ use crate::ui::fast_day_end::FastDayEndMessage;
 use crate::ui::fast_day_start::FastDayStartMessage;
 use crate::ui::issue_end_edit::IssueEndMessage;
 use crate::ui::issue_start_edit::IssueStartMessage;
+use crate::ui::settings_ui::SettingsUIMessage;
 use crate::ui::stay_active::StayActive;
 use crate::ui::ViewId;
 
@@ -56,6 +57,7 @@ pub enum Message {
     Is(IssueStartMessage),
     Ie(IssueEndMessage),
     Cd(CurrentDayMessage),
+    SettingsUi(SettingsUIMessage),
     EditAction(EditAction),
     DeleteAction(DeleteAction),
     StoreAction(StayActive, Action),
@@ -66,6 +68,7 @@ pub enum Message {
     },
     StoreSuccess(StayActive),
     Error(String),
+    TextChanged(String),
 }
 
 impl Default for Message {

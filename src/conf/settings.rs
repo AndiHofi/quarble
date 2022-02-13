@@ -46,6 +46,22 @@ impl Settings {
         }
     }
 
+    pub fn apply_ser(&self, ser: SettingsSer) -> Self {
+        Self {
+            settings_location: self.settings_location.clone(),
+            db_dir: ser.db_dir,
+            resolution: chrono::Duration::minutes(ser.resolution_minutes as i64),
+            write_settings: self.write_settings,
+            active_date: self.active_date,
+            timeline: self.timeline.clone(),
+            issue_parser: JiraIssueParser::new(ser.issue_shortcuts),
+            breaks: ser.breaks,
+            debug: self.debug,
+            close_on_safe: self.close_on_safe,
+            max_recent_issues: ser.max_recent_issues as usize,
+        }
+    }
+
     pub fn into_settings_ref(self) -> SettingsRef {
         into_settings_ref(self)
     }
@@ -83,7 +99,7 @@ impl Default for Settings {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, Clone, serde::Deserialize, serde::Serialize)]
 pub struct SettingsSer {
     pub db_dir: PathBuf,
     #[serde(default)]
