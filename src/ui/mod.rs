@@ -70,7 +70,7 @@ pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     };
     let renderer_settings = iced_wgpu::Settings {
         antialiasing: Some(iced_wgpu::settings::Antialiasing::MSAAx4),
-        default_text_size: 16,
+        default_text_size: 18,
         ..iced_wgpu::Settings::from_env()
     };
     iced_winit::application::run_with_window_configurator::<
