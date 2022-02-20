@@ -4,7 +4,7 @@ use iced_native::widget::{button, text_input};
 use iced_wgpu::TextInput;
 use iced_winit::widget::{scrollable, Column, Container, Row, Scrollable, Space, Text};
 
-use crate::conf::{Settings, SettingsRef};
+use crate::conf::SettingsRef;
 use crate::data::{Action, ActiveDay, Day};
 use crate::parsing::time::Time;
 use crate::ui::message::{DeleteAction, EditAction};
@@ -73,7 +73,7 @@ impl CurrentDayUI {
 }
 
 impl MainView for CurrentDayUI {
-    fn view(&mut self, _settings: &Settings) -> QElement {
+    fn view(&mut self) -> QElement {
         let day = self.data.get_day().to_string();
 
         let active_issue: Row<_, _> = if let Some(active_issue) = self.data.active_issue() {

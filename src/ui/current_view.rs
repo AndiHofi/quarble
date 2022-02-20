@@ -9,7 +9,7 @@ use crate::ui::issue_end_edit::IssueEndEdit;
 use crate::ui::issue_start_edit::IssueStartEdit;
 use crate::ui::settings_ui::SettingsUI;
 use crate::ui::single_edit_ui::SingleEditUi;
-use crate::ui::{Exit, ViewId};
+use crate::ui::{Exit, MainView, Message, QElement, ViewId};
 
 pub enum CurrentView {
     Fds(Box<FastDayStart>),
@@ -106,6 +106,36 @@ impl CurrentView {
                 CurrentView::Fde(ui)
             }
             _ => CurrentView::create(ViewId::CurrentDayUi, settings, recent_issues, active_day),
+        }
+    }
+}
+
+impl MainView for CurrentView {
+    fn view(&mut self) -> QElement {
+        match self {
+            CurrentView::Fds(v) => v.view(),
+            CurrentView::Fde(v) => v.view(),
+            CurrentView::CdUi(v) => v.view(),
+            CurrentView::Bs(v) => v.view(),
+            CurrentView::Is(v) => v.view(),
+            CurrentView::Ie(v) => v.view(),
+            CurrentView::Export(v) => v.view(),
+            CurrentView::Settings(v) => v.view(),
+            CurrentView::Exit(v) => v.view(),
+        }
+    }
+
+    fn update(&mut self, msg: Message) -> Option<Message> {
+        match self {
+            CurrentView::Fds(v) => v.update(msg),
+            CurrentView::Fde(v) => v.update(msg),
+            CurrentView::CdUi(v) => v.update(msg),
+            CurrentView::Bs(v) => v.update(msg),
+            CurrentView::Is(v) => v.update(msg),
+            CurrentView::Ie(v) => v.update(msg),
+            CurrentView::Export(v) => v.update(msg),
+            CurrentView::Settings(v) => v.update(msg),
+            CurrentView::Exit(v) => v.update(msg),
         }
     }
 }

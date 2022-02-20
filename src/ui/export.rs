@@ -2,7 +2,6 @@ use crate::conf::SettingsRef;
 use crate::data::{Action, ActiveDay, NormalizedDay, Normalizer, TimeCockpitExporter};
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{style, text, MainView, Message, QElement};
-use crate::Settings;
 use iced_core::Length;
 use iced_native::widget::{
     button, scrollable, Button, Checkbox, Column, Container, Row, Scrollable,
@@ -98,7 +97,7 @@ impl DayExportUi {
 }
 
 impl MainView for DayExportUi {
-    fn view(&mut self, _settings: &Settings) -> QElement {
+    fn view(&mut self) -> QElement {
         let title_text = self
             .active_day
             .as_ref()

@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use iced_core::Length;
+use iced_native::widget::text_input::State;
 use iced_native::widget::{button, scrollable, text_input, Button, Container, Scrollable};
 use iced_native::widget::{Column, Row};
 use regex::Regex;
@@ -17,7 +18,8 @@ use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_relative::TimeRelative;
 use crate::parsing::JiraIssueParser;
-use crate::ui::util::{focus_next_ed, focus_previous, h_space, v_space};
+use crate::ui::focus_handler::FocusHandler;
+use crate::ui::util::{h_space, v_space};
 use crate::ui::{style, text, MainView, Message, QElement};
 use crate::{Settings, SettingsSer};
 
@@ -118,25 +120,6 @@ impl SettingsUI {
         }
 
         None
-    }
-
-    fn focus_order(&mut self) -> Vec<&mut text_input::State> {
-        let mut result = vec![
-            &mut self.db_dir.input,
-            &mut self.resolution.input,
-            &mut self.max_recent_issues.input,
-            &mut self.min_breaks.input,
-            &mut self.min_work.input,
-            &mut self.default_break_start.input,
-            &mut self.default_break_end.input,
-        ];
-        for e in &mut self.shortcuts {
-            result.push(&mut e.shortcut.input);
-            result.push(&mut e.id.input);
-            result.push(&mut e.description.input);
-            result.push(&mut e.default_action.input);
-        }
-        result
     }
 
     fn validate(&mut self) -> Option<SettingsSer> {
@@ -326,8 +309,29 @@ impl SettingsUI {
 
 type VResult<T> = Result<T, String>;
 
+impl<'a> FocusHandler<'a, Vec<&'a mut text_input::State>> for SettingsUI {
+    fn focus_order(&'a mut self) -> Vec<&'a mut State> {
+        let mut result = vec![
+            &mut self.db_dir.input,
+            &mut self.resolution.input,
+            &mut self.max_recent_issues.input,
+            &mut self.min_breaks.input,
+            &mut self.min_work.input,
+            &mut self.default_break_start.input,
+            &mut self.default_break_end.input,
+        ];
+        for e in &mut self.shortcuts {
+            result.push(&mut e.shortcut.input);
+            result.push(&mut e.id.input);
+            result.push(&mut e.description.input);
+            result.push(&mut e.default_action.input);
+        }
+        result
+    }
+}
+
 impl MainView for SettingsUI {
-    fn view(&mut self, _: &Settings) -> QElement {
+    fn view(&mut self) -> QElement {
         let breaks_dur = Row::with_children(vec![
             self.min_breaks
                 .show_with_input_width("Required break (Minutes):", Length::Units(60)),
@@ -420,11 +424,11 @@ impl MainView for SettingsUI {
             }
             Message::Next => {
                 let _ = self.validate();
-                focus_next_ed(&mut self.focus_order(), true)
+                self.focus_next()
             }
             Message::Previous => {
                 let _ = self.validate();
-                focus_previous(&mut self.focus_order(), true)
+                self.focus_previous()
             }
             Message::SubmitCurrent(_) | Message::SettingsUi(SettingsUIMessage::SubmitSettings) => {
                 if let Some(x) = self.validate() {

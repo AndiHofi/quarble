@@ -10,7 +10,6 @@ use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{day_info_message, style, text, time_info, MainView, Message, QElement};
-use crate::Settings;
 
 #[derive(Clone, Debug)]
 pub enum IssueEndMessage {
@@ -95,7 +94,7 @@ impl SingleEditUi<WorkEnd> for IssueEndEdit {
 }
 
 impl MainView for IssueEndEdit {
-    fn view(&mut self, _settings: &Settings) -> QElement {
+    fn view(&mut self) -> QElement {
         let input = TextInput::new(&mut self.input_state, "now", &self.input, |e| {
             Message::Ie(IssueEndMessage::InputChanged(e))
         });

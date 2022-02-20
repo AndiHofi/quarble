@@ -1,7 +1,7 @@
 use iced_wgpu::TextInput;
 use iced_winit::widget::{text_input, Column, Row, Text};
 
-use crate::conf::{Settings, SettingsRef};
+use crate::conf::SettingsRef;
 use crate::data::{ActiveDay, DayEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
@@ -88,7 +88,7 @@ impl SingleEditUi<DayEnd> for FastDayEnd {
 }
 
 impl MainView for FastDayEnd {
-    fn view(&mut self, _settings: &Settings) -> QElement {
+    fn view(&mut self) -> QElement {
         let time_str = self
             .value
             .as_ref()

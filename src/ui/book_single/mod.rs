@@ -4,7 +4,7 @@ use iced_winit::widget::{text_input, Column};
 
 use parsing::WorkBuilder;
 
-use crate::conf::{Settings, SettingsRef};
+use crate::conf::SettingsRef;
 use crate::data::{ActiveDay, JiraIssue, RecentIssuesRef, Work};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
@@ -92,7 +92,7 @@ impl BookSingleUI {
 }
 
 impl MainView for BookSingleUI {
-    fn view(&mut self, _settings: &Settings) -> QElement {
+    fn view(&mut self) -> QElement {
         let input = TextInput::new(&mut self.input_state, "", &self.input, |s| {
             Message::Bs(BookSingleMessage::TextChanged(s))
         });

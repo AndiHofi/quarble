@@ -4,6 +4,7 @@ use std::rc::Rc;
 use arc_swap::ArcSwap;
 use iced_core::alignment::Vertical;
 use iced_core::{Color, Padding};
+use iced_core::keyboard::Event;
 use iced_native::clipboard;
 use iced_wgpu::Text;
 use iced_winit::settings::SettingsWindowConfigurator;
@@ -57,6 +58,7 @@ mod top_bar;
 mod util;
 mod view_id;
 mod window_configurator;
+mod focus_handler;
 
 pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     let config_settings = main_action.settings.clone();
@@ -270,33 +272,7 @@ impl iced_winit::Program for Quarble {
                     );
                     return Command::single(clipboard);
                 }
-                m => match &mut self.current_view {
-                    CurrentView::Fds(fds) => {
-                        message = fds.update(m);
-                    }
-                    CurrentView::Fde(fde) => {
-                        message = fde.update(m);
-                    }
-                    CurrentView::Bs(bs) => {
-                        message = bs.update(m);
-                    }
-                    CurrentView::Is(is) => {
-                        message = is.update(m);
-                    }
-                    CurrentView::Ie(ie) => {
-                        message = ie.update(m);
-                    }
-                    CurrentView::CdUi(cd) => {
-                        message = cd.update(m);
-                    }
-                    CurrentView::Export(ex) => {
-                        message = ex.update(m);
-                    }
-                    CurrentView::Settings(s) => {
-                        message = s.update(m);
-                    }
-                    _ => {}
-                },
+                m => message = self.current_view.update(m),
             }
         }
         Command::none()
@@ -304,18 +280,7 @@ impl iced_winit::Program for Quarble {
 
     fn view(&mut self) -> Element<'_, Self::Message, Self::Renderer> {
         let view_id = self.current_view.view_id();
-        let settings = self.settings.load();
-        let content = match &mut self.current_view {
-            CurrentView::Fds(fds) => fds.view(&settings),
-            CurrentView::Fde(fde) => fde.view(&settings),
-            CurrentView::CdUi(cdui) => cdui.view(&settings),
-            CurrentView::Bs(bs) => bs.view(&settings),
-            CurrentView::Exit(exit) => exit.view(&settings),
-            CurrentView::Is(is) => is.view(&settings),
-            CurrentView::Ie(ie) => ie.view(&settings),
-            CurrentView::Export(ex) => ex.view(&settings),
-            CurrentView::Settings(s) => s.view(&settings),
-        };
+        let content = self.current_view.view();
         let element = Container::new(content).padding(Padding::new(style::WINDOW_PADDING));
 
         let mut main = Column::new();
@@ -341,7 +306,7 @@ impl iced_winit::Program for Quarble {
         if view_id.show_recent() {
             main = main
                 .push(v_space(style::SPACE))
-                .push(self.recent_view.view(&settings));
+                .push(self.recent_view.view());
         }
 
         let main: QElement = main.into();
@@ -433,9 +398,17 @@ fn store_active_day(
 }
 
 trait MainView {
-    fn view(&mut self, settings: &Settings) -> QElement;
+    fn view(&mut self) -> QElement;
 
     fn update(&mut self, msg: Message) -> Option<Message>;
+
+    fn handle_keyboard_event(
+        &self,
+        _: Event,
+        _: iced_winit::event::Status,
+    ) -> Option<Message> {
+        None
+    }
 }
 
 type QElement<'a> = Element<'a, Message, <Quarble as iced_winit::Program>::Renderer>;
@@ -444,7 +417,7 @@ type QRenderer = iced_wgpu::Renderer;
 pub struct Exit;
 
 impl MainView for Exit {
-    fn view(&mut self, _settings: &Settings) -> QElement {
+    fn view(&mut self) -> QElement {
         Text::new("exiting ...").into()
     }
 

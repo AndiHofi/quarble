@@ -5,7 +5,6 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::data::{RecentIssue, RecentIssuesData, RecentIssuesRef};
 use crate::ui::util::h_space;
 use crate::ui::{style, text, MainView, Message, QElement};
-use crate::Settings;
 
 pub struct RecentIssuesView {
     recent: RecentIssuesRef,
@@ -59,7 +58,7 @@ impl RecentIssuesView {
 }
 
 impl MainView for RecentIssuesView {
-    fn view(&mut self, _settings: &Settings) -> QElement {
+    fn view(&mut self) -> QElement {
         let mut lines = Column::new();
         let mut current_row = Row::new();
 

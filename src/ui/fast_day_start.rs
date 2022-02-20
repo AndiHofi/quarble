@@ -1,4 +1,4 @@
-use crate::conf::{Settings, SettingsRef};
+use crate::conf::{SettingsRef};
 use crate::data::{ActiveDay, DayStart, Location};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
@@ -80,7 +80,7 @@ impl SingleEditUi<DayStart> for FastDayStart {
 }
 
 impl MainView for FastDayStart {
-    fn view(&mut self, _settings: &Settings) -> QElement {
+    fn view(&mut self) -> QElement {
         let loc_str = match self.builder.location.as_ref() {
             ParseResult::Valid(t) => t.to_string(),
             ParseResult::Invalid(_) | ParseResult::Incomplete => "Invalid location".to_string(),

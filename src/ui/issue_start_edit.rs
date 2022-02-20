@@ -98,15 +98,16 @@ impl SingleEditUi<WorkStart> for IssueStartEdit {
 }
 
 impl MainView for IssueStartEdit {
-    fn view(&mut self, _settings: &Settings) -> QElement {
+    fn view(&mut self) -> QElement {
         let input = TextInput::new(&mut self.input_state, "", &self.input, |i| {
             Message::Is(IssueStartMessage::TextChanged(i))
         });
+        let settings = self.settings.load();
 
         let info = Row::with_children(vec![
             text("Time:"),
             h_space(style::SPACE),
-            time_info(_settings.timeline.time_now(), self.builder.time.clone()),
+            time_info(settings.timeline.time_now(), self.builder.time.clone()),
             h_space(style::DSPACE),
             text("Issue:"),
             h_space(style::SPACE),
