@@ -1,9 +1,9 @@
 use iced_core::Length;
-use iced_native::widget::{Column, Row};
+use iced_native::widget::{Column, Row, Text};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::data::{RecentIssue, RecentIssuesData, RecentIssuesRef};
-use crate::ui::util::h_space;
+use crate::ui::util::{h_space, v_space};
 use crate::ui::{style, text, MainView, Message, QElement};
 
 pub struct RecentIssuesView {
@@ -62,11 +62,12 @@ impl MainView for RecentIssuesView {
         let mut lines = Column::new();
         let mut current_row = Row::new();
 
-        for (num, recent) in self.visible.iter().enumerate().take(8) {
-            if num % 2 == 0 {
+        for (num, recent) in self.visible.iter().enumerate().take(20) {
+            if num % 2 == 0 && num != 0 {
                 let mut tmp = Row::new();
                 std::mem::swap(&mut tmp, &mut current_row);
                 lines = lines.push(tmp);
+                lines = lines.push(v_space(Length::Units(3)));
             }
             current_row = current_row.push(build_recent(num + 1, recent));
         }
@@ -91,22 +92,31 @@ fn build_recent(num: usize, recent: &RecentIssue) -> QElement {
         .or(recent.issue.default_action.as_deref())
         .unwrap_or("<no description>");
 
-    let description = limit_text_length(&description);
+    let action = recent.issue.default_action.as_deref().unwrap_or("-");
+
+    let description = limit_text_length(description, 55);
+    let action = limit_text_length(action, 25);
 
     Row::with_children(vec![
-        text(format!("{}:", num)),
+        Text::new(format!("{}:", num))
+            .width(Length::Units(22))
+            .into(),
         h_space(style::SPACE),
-        text(&recent.issue.ident),
+        Text::new(&recent.issue.ident)
+            .width(Length::Units(100))
+            .into(),
         h_space(style::SPACE),
-        text(description),
+        Text::new(action).width(Length::Units(190)).into(),
+        h_space(style::SPACE),
+        Text::new(description).into(),
     ])
-    .max_width(600)
-    .width(Length::Units(500))
+    .max_width(800)
+    .width(Length::Units(800))
     .into()
 }
 
-fn limit_text_length(description: &&str) -> String {
-    let description = if let Some((i, _)) = description.grapheme_indices(false).nth(50) {
+fn limit_text_length(description: &str, length: usize) -> String {
+    let description = if let Some((i, _)) = description.grapheme_indices(false).nth(length) {
         format!("{}…", &description[..i])
     } else {
         description.to_string()

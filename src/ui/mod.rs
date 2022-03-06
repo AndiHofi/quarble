@@ -3,8 +3,8 @@ use std::rc::Rc;
 
 use arc_swap::ArcSwap;
 use iced_core::alignment::Vertical;
-use iced_core::{Color, Padding};
 use iced_core::keyboard::Event;
+use iced_core::{Color, Padding};
 use iced_native::clipboard;
 use iced_wgpu::Text;
 use iced_winit::settings::SettingsWindowConfigurator;
@@ -43,6 +43,7 @@ mod current_view;
 mod export;
 pub mod fast_day_end;
 pub mod fast_day_start;
+mod focus_handler;
 mod issue_end_edit;
 mod issue_start_edit;
 mod keyboard_handler;
@@ -58,7 +59,6 @@ mod top_bar;
 mod util;
 mod view_id;
 mod window_configurator;
-mod focus_handler;
 
 pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     let config_settings = main_action.settings.clone();
@@ -306,7 +306,7 @@ impl iced_winit::Program for Quarble {
         if view_id.show_recent() {
             main = main
                 .push(v_space(style::SPACE))
-                .push(self.recent_view.view());
+                .push(Container::new(self.recent_view.view()).padding(style::WINDOW_PADDING));
         }
 
         let main: QElement = main.into();
@@ -402,11 +402,7 @@ trait MainView {
 
     fn update(&mut self, msg: Message) -> Option<Message>;
 
-    fn handle_keyboard_event(
-        &self,
-        _: Event,
-        _: iced_winit::event::Status,
-    ) -> Option<Message> {
+    fn handle_keyboard_event(&self, _: Event, _: iced_winit::event::Status) -> Option<Message> {
         None
     }
 }
