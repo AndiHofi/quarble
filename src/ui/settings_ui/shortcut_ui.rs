@@ -1,5 +1,5 @@
 use crate::data::JiraIssue;
-use crate::ui::settings_ui::my_text_input::MyTextInput;
+use crate::ui::my_text_input::MyTextInput;
 use crate::ui::util::h_space;
 use crate::ui::{settings_ui, style, QElement};
 use iced_core::Length;

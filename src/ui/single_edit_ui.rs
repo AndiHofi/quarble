@@ -6,8 +6,6 @@ pub trait SingleEditUi<T>
 where
     T: Into<Action>,
 {
-    fn update_input(&mut self, input: String);
-
     fn as_text(&self, orig: &T) -> String;
 
     fn set_orig(&mut self, orig: T);
@@ -15,10 +13,7 @@ where
     fn try_build(&self) -> Option<T>;
 
     fn entry_to_edit(&mut self, orig: T) {
-        let input = self.as_text(&orig);
         self.set_orig(orig);
-
-        self.update_input(input);
     }
 
     fn on_submit_message(

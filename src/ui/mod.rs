@@ -18,7 +18,7 @@ pub use message::Message;
 use stay_active::StayActive;
 pub use view_id::ViewId;
 
-use crate::conf::{update_settings, SettingsRef};
+use crate::conf::{SettingsRef, update_settings};
 use crate::data::{
     Action, ActiveDay, Day, RecentIssues, RecentIssuesData, RecentIssuesRef, TimedAction,
 };
@@ -59,6 +59,7 @@ mod util;
 mod view_id;
 mod window_configurator;
 mod focus_handler;
+mod my_text_input;
 
 pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     let config_settings = main_action.settings.clone();

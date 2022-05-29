@@ -52,9 +52,7 @@ impl IssueEndEdit {
             orig: None,
         })
     }
-}
 
-impl SingleEditUi<WorkEnd> for IssueEndEdit {
     fn update_input(&mut self, input: String) {
         self.input = input;
         let guard = self.settings.load();
@@ -68,12 +66,17 @@ impl SingleEditUi<WorkEnd> for IssueEndEdit {
         }
     }
 
+}
+
+impl SingleEditUi<WorkEnd> for IssueEndEdit {
     fn as_text(&self, e: &WorkEnd) -> String {
         format!("{} {}", e.ts, e.task.ident)
     }
 
     fn set_orig(&mut self, orig: WorkEnd) {
-        self.orig = Some(orig)
+        let input = self.as_text(&orig);
+        self.orig = Some(orig);
+        self.update_input(input);
     }
 
     fn try_build(&self) -> Option<WorkEnd> {

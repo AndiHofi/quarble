@@ -83,6 +83,13 @@ impl<T, E> ParseResult<T, E> {
         }
     }
 
+    pub fn unwrap_or(self, default: T) -> T {
+        match self {
+            ParseResult::None | ParseResult::Invalid(_) | ParseResult::Incomplete => default,
+            ParseResult::Valid(t) => t,
+        }
+    }
+
     pub fn get_ref(&self) -> Option<&T> {
         self.as_ref().get()
     }
@@ -102,7 +109,7 @@ impl<T, E: Default> ParseResult<T, E> {
     }
 }
 
-impl<T: Clone + Default, E> ParseResult<T, E> {
+impl<T: Clone, E> ParseResult<T, E> {
     pub fn get_with_default(&self, default: T) -> Option<T> {
         match self {
             ParseResult::None => Some(default),

@@ -1,6 +1,7 @@
-use crate::data::JiraIssue;
+use crate::data::{JiraIssue, WorkEntry};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
+use crate::data::current_work::CurrentWork;
 
 use crate::data::location::Location;
 use crate::data::work::{Work, WorkEnd, WorkEvent, WorkStart};
@@ -19,6 +20,7 @@ pub enum Action {
     Vacation,
     Sick,
     Doctor(Doctor),
+    CurrentWork(CurrentWork)
 }
 
 impl Action {
@@ -86,6 +88,7 @@ impl Action {
             Action::Vacation => 8,
             Action::Sick => 9,
             Action::Doctor(_) => 10,
+            Action::CurrentWork(_) => 11,
         }
     }
 
@@ -116,6 +119,7 @@ impl TimedAction for Action {
             Action::DayOff | Action::Vacation | Action::Sick => (&Time::ZERO, None),
             Action::ZA(ZA { start, end }) => (start, Some(end)),
             Action::Doctor(Doctor { start, end }) => (start, Some(end)),
+            Action::CurrentWork(CurrentWork { start, ..}) => (start, None),
         };
         (*start, end.cloned())
     }
@@ -174,6 +178,9 @@ impl<'a> Display for NoTimeDisplay<'a> {
             Action::Doctor(_) => {
                 write!(f, "doctor")
             }
+            Action::CurrentWork(CurrentWork {description, ..}) => {
+                write!(f, "current {description}")
+            }
         }
     }
 }
@@ -217,6 +224,9 @@ impl Display for Action {
             }
             Action::Doctor(d) => {
                 write!(f, "{} - {} | doctor", d.start, d.end)
+            }
+            Action::CurrentWork(CurrentWork {start, task: JiraIssue {ident, ..}, description})  => {
+                write!(f, "{start} - next  | {ident} - {description}")
             }
         }
     }
@@ -289,5 +299,14 @@ impl From<DayStart> for Action {
 impl From<DayEnd> for Action {
     fn from(e: DayEnd) -> Self {
         Action::DayEnd(e)
+    }
+}
+
+impl From<WorkEntry> for Action {
+    fn from(w: WorkEntry) -> Self {
+        match w {
+            WorkEntry::Work(w) => Action::Work(w),
+            WorkEntry::Current(c) => Action::CurrentWork(c),
+        }
     }
 }

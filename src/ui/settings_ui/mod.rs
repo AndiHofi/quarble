@@ -5,11 +5,11 @@ use std::sync::Arc;
 
 use iced_core::Length;
 use iced_native::widget::text_input::State;
-use iced_native::widget::{button, scrollable, text_input, Button, Container, Scrollable};
+use iced_native::widget::{button, Button, Container, scrollable, Scrollable, text_input};
 use iced_native::widget::{Column, Row};
 use regex::Regex;
 
-use my_text_input::MyTextInput;
+use crate::ui::my_text_input::MyTextInput;
 use shortcut_ui::ShortCutUi;
 
 use crate::conf::{BreaksConfig, SettingsRef};
@@ -20,10 +20,9 @@ use crate::parsing::time_relative::TimeRelative;
 use crate::parsing::JiraIssueParser;
 use crate::ui::focus_handler::FocusHandler;
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{style, text, MainView, Message, QElement};
+use crate::ui::{MainView, Message, QElement, style, text};
 use crate::{Settings, SettingsSer};
 
-mod my_text_input;
 mod shortcut_ui;
 
 #[derive(Clone, Debug)]

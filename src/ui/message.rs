@@ -69,6 +69,7 @@ pub enum Message {
     StoreSuccess(StayActive),
     Error(String),
     TextChanged(String),
+    FilterRecent(Box<str>, Box<str>),
 }
 
 impl Default for Message {

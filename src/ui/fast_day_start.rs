@@ -52,15 +52,16 @@ impl FastDayStart {
             orig: None,
         })
     }
-}
 
-impl SingleEditUi<DayStart> for FastDayStart {
     fn update_input(&mut self, input: String) {
         self.text = input;
         self.builder
             .parse_value(&self.timeline, &self.limits, &self.text);
     }
 
+}
+
+impl SingleEditUi<DayStart> for FastDayStart {
     fn as_text(&self, e: &DayStart) -> String {
         let loc = match e.location {
             Location::Office => "o",
@@ -71,7 +72,9 @@ impl SingleEditUi<DayStart> for FastDayStart {
     }
 
     fn set_orig(&mut self, orig: DayStart) {
-        self.orig = Some(orig)
+        let input = self.as_text(&orig);
+        self.orig = Some(orig);
+        self.update_input(input);
     }
 
     fn try_build(&self) -> Option<DayStart> {

@@ -53,10 +53,8 @@ impl FastDayEnd {
             settings,
         })
     }
-}
 
-impl SingleEditUi<DayEnd> for FastDayEnd {
-    fn update_input(&mut self, input: String) {
+    pub fn update_input(&mut self, input: String) {
         self.text = input;
 
         self.bad_input = false;
@@ -74,12 +72,17 @@ impl SingleEditUi<DayEnd> for FastDayEnd {
         self.builder.ts = result;
     }
 
+}
+
+impl SingleEditUi<DayEnd> for FastDayEnd {
     fn as_text(&self, orig: &DayEnd) -> String {
         orig.ts.to_string()
     }
 
     fn set_orig(&mut self, orig: DayEnd) {
+        let txt = self.as_text(&orig);
         self.original_entry = Some(orig);
+        self.update_input(txt)
     }
 
     fn try_build(&self) -> Option<DayEnd> {

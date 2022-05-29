@@ -1,5 +1,5 @@
 use crate::conf::SettingsRef;
-use crate::data::{Action, ActiveDay, RecentIssuesRef};
+use crate::data::{Action, ActiveDay, RecentIssuesRef, WorkEntry};
 use crate::ui::book_single::BookSingleUI;
 use crate::ui::current_day::CurrentDayUI;
 use crate::ui::export::DayExportUi;
@@ -82,7 +82,12 @@ impl CurrentView {
         match value {
             Action::Work(a) => {
                 let mut ui = BookSingleUI::for_active_day(settings, recent_issues, active_day);
-                ui.entry_to_edit(a);
+                ui.entry_to_edit(WorkEntry::Work(a));
+                CurrentView::Bs(ui)
+            }
+            Action::CurrentWork(a) => {
+                let mut ui = BookSingleUI::for_active_day(settings, recent_issues, active_day);
+                ui.entry_to_edit(WorkEntry::Current(a));
                 CurrentView::Bs(ui)
             }
             Action::WorkStart(a) => {

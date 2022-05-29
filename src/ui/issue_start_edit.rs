@@ -70,9 +70,7 @@ impl IssueStartEdit {
 
         Self::on_submit_message(value, &mut self.orig, stay_active)
     }
-}
 
-impl SingleEditUi<WorkStart> for IssueStartEdit {
     fn update_input(&mut self, input: String) {
         self.input = input;
         let x = self.settings.load();
@@ -84,12 +82,18 @@ impl SingleEditUi<WorkStart> for IssueStartEdit {
         );
     }
 
+
+}
+
+impl SingleEditUi<WorkStart> for IssueStartEdit {
     fn as_text(&self, e: &WorkStart) -> String {
         format!("{} {} {}", e.ts, e.task.ident, e.description)
     }
 
     fn set_orig(&mut self, orig: WorkStart) {
+        let input = self.as_text(&orig);
         self.orig = Some(orig);
+        self.update_input(input);
     }
 
     fn try_build(&self) -> Option<WorkStart> {

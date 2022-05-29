@@ -6,7 +6,7 @@ use iced_native::widget::{text_input, Row, TextInput};
 pub struct MyTextInput {
     pub text: String,
     pub input: text_input::State,
-    pub accept_input_fn: Box<dyn Fn(&str) -> bool>,
+    pub accept_input_fn: Box<dyn Fn(&str) -> (bool, Option<Message>)>,
     pub error: Option<String>,
 }
 
@@ -23,13 +23,22 @@ impl MyTextInput {
         S: ToString,
         F: Fn(&str) -> bool + 'static,
     {
+        Self::msg_aware(text.map(|s|s.to_string()).unwrap_or_default(), move |i| (accept(i), None))
+    }
+
+    pub fn msg_aware<S, F>(text: S, accept: F) -> Self
+        where
+            S: ToString,
+            F: Fn(&str) -> (bool, Option<Message>) + 'static,
+    {
         Self {
-            text: text.map(|s| s.to_string()).unwrap_or_default(),
+            text: text.to_string(),
             input: text_input::State::new(),
             accept_input_fn: Box::new(accept),
             error: None,
         }
     }
+
 
     pub fn show(&mut self, label: &'static str) -> QElement {
         self.show_with_input_width(label, Length::Fill)
@@ -58,11 +67,12 @@ impl MyTextInput {
         self.input.is_focused()
     }
 
-    pub fn accept_input(&mut self, text: String) {
-        let accept = (*self.accept_input_fn)(text.as_str());
+    pub fn accept_input(&mut self, text: String) -> Option<Message> {
+        let (accept, msg) = (*self.accept_input_fn)(text.as_str());
         if accept {
             self.text = text;
         }
+        msg
     }
 
     pub fn consume_err<T>(&mut self, result: Result<T, String>) -> Result<T, ()> {

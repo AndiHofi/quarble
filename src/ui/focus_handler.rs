@@ -4,7 +4,7 @@ use iced_native::widget::text_input;
 
 pub trait FocusHandler<'a, F>
 where
-    F: DerefMut<Target=[&'a mut text_input::State]> + IntoIterator<Item = &'a mut text_input::State>,
+    F: AsMut<[&'a mut text_input::State]> + IntoIterator<Item = &'a mut text_input::State>,
 {
     fn focus_order(&'a mut self) -> F;
 
@@ -22,12 +22,13 @@ where
 
     fn focus_next(&'a mut self) -> Option<Message> {
         let mut order = self.focus_order();
-        focus_next(order.deref_mut(), Self::rotate())
+        let mut order: &mut [&mut text_input::State] = order.as_mut();
+        focus_next(order, Self::rotate())
     }
 
     fn focus_previous(&'a mut self) -> Option<Message> {
         let mut order = self.focus_order();
-        focus_previous(order.deref_mut(), Self::rotate())
+        focus_previous(order.as_mut(), Self::rotate())
     }
 
     fn rotate() -> bool {
