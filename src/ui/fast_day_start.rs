@@ -1,5 +1,5 @@
 use crate::conf::{SettingsRef};
-use crate::data::{ActiveDay, DayStart, Location};
+use crate::data::{Action, ActiveDay, DayStart, Location};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeRange, TimeResult};
@@ -9,6 +9,7 @@ use crate::ui::{day_info_message, style, unbooked_time, MainView, Message, QElem
 use crate::util::Timeline;
 use iced_wgpu::TextInput;
 use iced_winit::widget::{text_input, Column, Row, Space, Text};
+use crate::ui::stay_active::StayActive;
 
 #[derive(Clone, Debug)]
 pub enum FastDayStartMessage {
@@ -53,12 +54,6 @@ impl FastDayStart {
         })
     }
 
-    fn update_input(&mut self, input: String) {
-        self.text = input;
-        self.builder
-            .parse_value(&self.timeline, &self.limits, &self.text);
-    }
-
 }
 
 impl SingleEditUi<DayStart> for FastDayStart {
@@ -79,6 +74,13 @@ impl SingleEditUi<DayStart> for FastDayStart {
 
     fn try_build(&self) -> Option<DayStart> {
         self.builder.try_build(&self.timeline)
+    }
+
+    fn update_input(&mut self, input: String) -> Option<Message> {
+        self.text = input;
+        self.builder
+            .parse_value(&self.timeline, &self.limits, &self.text);
+        None
     }
 }
 
@@ -120,8 +122,7 @@ impl MainView for FastDayStart {
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Fds(FastDayStartMessage::TextChanged(new_value)) => {
-                self.update_input(new_value);
-                None
+                self.update_input(new_value)
             }
             Message::SubmitCurrent(stay_active) => {
                 Self::on_submit_message(self.try_build(), &mut self.orig, stay_active)

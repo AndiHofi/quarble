@@ -2,7 +2,7 @@ use iced_native::widget::{text_input, Column, Row};
 use iced_wgpu::TextInput;
 
 use crate::conf::SettingsRef;
-use crate::data::{ActiveDay, JiraIssue, RecentIssues, RecentIssuesRef, WorkStart};
+use crate::data::{Action, ActiveDay, JiraIssue, RecentIssues, RecentIssuesRef, WorkStart};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::{parse_issue_clipboard, IssueParsed, IssueParser, IssueParserWithRecent};
@@ -71,17 +71,6 @@ impl IssueStartEdit {
         Self::on_submit_message(value, &mut self.orig, stay_active)
     }
 
-    fn update_input(&mut self, input: String) {
-        self.input = input;
-        let x = self.settings.load();
-        self.builder.parse_input(
-            &**x,
-            self.last_end,
-            &**self.recent_issues.borrow(),
-            &self.input,
-        );
-    }
-
 
 }
 
@@ -98,6 +87,19 @@ impl SingleEditUi<WorkStart> for IssueStartEdit {
 
     fn try_build(&self) -> Option<WorkStart> {
         self.builder.try_build()
+    }
+
+    fn update_input(&mut self, input: String) -> Option<Message> {
+        self.input = input;
+        let x = self.settings.load();
+        self.builder.parse_input(
+            &**x,
+            self.last_end,
+            &**self.recent_issues.borrow(),
+            &self.input,
+        );
+
+        self.follow_up()
     }
 }
 
@@ -140,8 +142,7 @@ impl MainView for IssueStartEdit {
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Is(IssueStartMessage::TextChanged(input)) => {
-                self.update_input(input);
-                self.follow_up()
+                self.update_input(input)
             }
             Message::ClipboardValue(value) => {
                 self.builder.apply_clipboard(value);
@@ -199,6 +200,7 @@ impl IssueStartBuilder {
             r: issue,
             input: matching,
             rest,
+            is_recent: _
         } = parser.parse_task(input.trim_start());
 
         self.time = time;

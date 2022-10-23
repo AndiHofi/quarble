@@ -2,7 +2,7 @@ use iced_wgpu::TextInput;
 use iced_winit::widget::{text_input, Column, Row, Text};
 
 use crate::conf::SettingsRef;
-use crate::data::{ActiveDay, DayEnd};
+use crate::data::{Action, ActiveDay, DayEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeRange, TimeResult};
@@ -10,6 +10,7 @@ use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::v_space;
 use crate::ui::{day_info_message, style, unbooked_time, MainView, Message, QElement};
+use crate::ui::stay_active::StayActive;
 
 #[derive(Clone, Debug)]
 pub enum FastDayEndMessage {
@@ -54,7 +55,24 @@ impl FastDayEnd {
         })
     }
 
-    pub fn update_input(&mut self, input: String) {
+}
+
+impl SingleEditUi<DayEnd> for FastDayEnd {
+    fn as_text(&self, orig: &DayEnd) -> String {
+        orig.ts.to_string()
+    }
+
+    fn set_orig(&mut self, orig: DayEnd) {
+        let txt = self.as_text(&orig);
+        self.original_entry = Some(orig);
+        self.update_input(txt);
+    }
+
+    fn try_build(&self) -> Option<DayEnd> {
+        self.builder.try_build()
+    }
+
+    fn update_input(&mut self, input: String) -> Option<Message> {
         self.text = input;
 
         self.bad_input = false;
@@ -70,23 +88,7 @@ impl FastDayEnd {
             .and_then(|r| check_any_limit_overlaps(r, &self.limits));
 
         self.builder.ts = result;
-    }
-
-}
-
-impl SingleEditUi<DayEnd> for FastDayEnd {
-    fn as_text(&self, orig: &DayEnd) -> String {
-        orig.ts.to_string()
-    }
-
-    fn set_orig(&mut self, orig: DayEnd) {
-        let txt = self.as_text(&orig);
-        self.original_entry = Some(orig);
-        self.update_input(txt)
-    }
-
-    fn try_build(&self) -> Option<DayEnd> {
-        self.builder.try_build()
+        None
     }
 }
 
@@ -117,8 +119,7 @@ impl MainView for FastDayEnd {
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Fde(FastDayEndMessage::TextChanged(new_value)) => {
-                self.update_input(new_value);
-                None
+                self.update_input(new_value)
             }
             Message::SubmitCurrent(stay_active) => {
                 Self::on_submit_message(self.try_build(), &mut self.original_entry, stay_active)

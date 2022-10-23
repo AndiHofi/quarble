@@ -27,6 +27,7 @@ pub struct IssueParsed<'a> {
     pub r: ParseResult<JiraIssue, ()>,
     pub input: &'a str,
     pub rest: &'a str,
+    pub is_recent: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -42,14 +43,14 @@ impl JiraIssueParser {
     pub fn shortcuts(&self) -> &BTreeMap<char, JiraIssue> {
         &self.shortcuts
     }
-    
+
     pub fn valid_id(text: &str) -> bool {
         if let Some(c) = ISSUE.captures(text) {
             rest(c, text).is_empty()
-        } else { 
+        } else {
             false
         }
-    } 
+    }
 }
 
 impl IssueParser for JiraIssueParser {
@@ -66,6 +67,7 @@ impl IssueParser for JiraIssueParser {
                 }),
                 input: matching(&c),
                 rest: rest(c, input),
+                is_recent: false,
             }
         } else if let Some(c) = ISSUE.captures(input) {
             let id = c.name("id").unwrap().as_str();
@@ -73,6 +75,7 @@ impl IssueParser for JiraIssueParser {
                 r: ParseResult::Valid(JiraIssue::create(id).unwrap()),
                 input: matching(&c),
                 rest: rest(c, input),
+                is_recent: false,
             }
         } else if let Some(c) = ISSUE_SHORTCUT.captures(input) {
             let abbr = c.name("abbr").unwrap().as_str();
@@ -82,18 +85,21 @@ impl IssueParser for JiraIssueParser {
                     r: ParseResult::None,
                     input: matching(&c),
                     rest: rest(c, input),
+                    is_recent: false,
                 }
             } else if let Some(i) = self.shortcuts.get(&ch) {
                 IssueParsed {
                     r: ParseResult::Valid(i.clone()),
                     input: matching(&c),
                     rest: rest(c, input),
+                    is_recent: false,
                 }
             } else {
                 IssueParsed {
                     r: ParseResult::Invalid(()),
                     input: matching(&c),
                     rest: rest(c, input),
+                    is_recent: false,
                 }
             }
         } else {
@@ -101,6 +107,7 @@ impl IssueParser for JiraIssueParser {
                 r: ParseResult::None,
                 input: "",
                 rest: input,
+                is_recent: false,
             }
         }
     }
@@ -126,6 +133,7 @@ impl<'a> IssueParser for IssueParserWithRecent<'a> {
                 r: recent.ok_or(()).into(),
                 input,
                 rest: rest(c, input),
+                is_recent: true,
             }
         } else {
             self.delegate.parse_task(input)
@@ -167,7 +175,8 @@ mod test {
             IssueParsed {
                 r: ParseResult::None,
                 input: "",
-                rest: "ab"
+                rest: "ab",
+                is_recent: false
             }
         );
         assert_eq!(
@@ -175,7 +184,8 @@ mod test {
             IssueParsed {
                 r: ParseResult::Invalid(()),
                 input: "x",
-                rest: " b"
+                rest: " b",
+                is_recent: false
             }
         );
     }
@@ -190,7 +200,8 @@ mod test {
             IssueParsed {
                 r: ParseResult::None,
                 input: "",
-                rest: "APM--"
+                rest: "APM--",
+                is_recent: false
             }
         );
         assert_eq!(
@@ -198,7 +209,8 @@ mod test {
             IssueParsed {
                 r: ParseResult::None,
                 input: "",
-                rest: " QU-1"
+                rest: " QU-1",
+                is_recent: false
             }
         );
         assert_eq!(
@@ -206,7 +218,8 @@ mod test {
             IssueParsed {
                 r: ParseResult::None,
                 input: "",
-                rest: "1QU-2"
+                rest: "1QU-2",
+                is_recent: false
             }
         );
         assert_eq!(
@@ -214,7 +227,8 @@ mod test {
             IssueParsed {
                 r: ParseResult::None,
                 input: "",
-                rest: "-2"
+                rest: "-2",
+                is_recent: false
             }
         );
         assert_eq!(p.parse_task("QU-98("), valid("QU-98", "("));
@@ -234,7 +248,8 @@ mod test {
             IssueParsed {
                 r: ParseResult::Valid(JiraIssue::create("QU-789").unwrap()),
                 input: "QU-789 \t \t#",
-                rest: "work 1"
+                rest: "work 1",
+                is_recent: false
             }
         );
     }
@@ -244,6 +259,7 @@ mod test {
             r: ParseResult::Valid(JiraIssue::create(id).unwrap()),
             input,
             rest,
+            is_recent: false,
         }
     }
 
@@ -261,6 +277,7 @@ mod test {
             }),
             input,
             rest,
+            is_recent: false,
         }
     }
 
@@ -269,6 +286,7 @@ mod test {
             r: ParseResult::Valid(JiraIssue::create(id).unwrap()),
             input: id,
             rest,
+            is_recent: false,
         }
     }
 

@@ -26,6 +26,14 @@ impl MyTextInput {
         Self::msg_aware(text.map(|s|s.to_string()).unwrap_or_default(), move |i| (accept(i), None))
     }
 
+    /// New text-input with input accept function
+    ///
+    /// The function is called whenever trying to change the text of the text field.
+    /// Function parameter is the value of the updated text.
+    ///
+    /// Function return is a tuple consisting of:
+    /// * a boolean, true when the updated text is accepted
+    /// * an optional Message to send - this can be used to change focus on specific inputs
     pub fn msg_aware<S, F>(text: S, accept: F) -> Self
         where
             S: ToString,

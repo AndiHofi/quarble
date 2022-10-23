@@ -3,7 +3,7 @@ use anyhow::anyhow;
 use lazy_static::lazy_static;
 use regex::Regex;
 use crate::data::{Action, CurrentWork, JiraIssue, Work};
-use crate::parsing::{IssueParser, JiraIssueParser};
+use crate::parsing::{IssueParser, IssueParserWithRecent, JiraIssueParser};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_relative::TimeRelative;
@@ -11,6 +11,7 @@ use crate::ui::clip_read::ClipRead;
 use crate::ui::Message;
 use crate::util::Timeline;
 
+/// UI model of the
 #[derive(Default, Debug)]
 pub struct WorkData {
     pub start: ParseResult<WTime, ()>,
@@ -69,15 +70,20 @@ impl WorkData {
 
                 let end = match end {
                     WTime::Time(t) => Some(*t),
-                    WTime::Empty | WTime::Now => Some(now),
+                    WTime::Now => Some(now),
                     WTime::Last if last.is_some()=> last,
-                    WTime::Last => return None,
+                    WTime::Last | WTime::Empty => return None,
                 };
+
+                dbg!(task);
 
                 let task = match task {
                     IssueInput::Match(task) => Some(task.as_str()),
-                     _ => None
+                    IssueInput::Recent(task) => Some(task.ident.as_str()),
+                    IssueInput::Clipboard => None,
                 };
+
+                dbg!(task);
 
                 if let (Some(start), Some(task), Some(msg)) = (start, task, msg) {
                     Some(ValidWorkData {
@@ -123,8 +129,8 @@ pub enum WTime {
 
 #[derive(Debug)]
 pub enum IssueInput {
+    Recent(JiraIssue),
     Match(String),
-    Input(String),
     Clipboard
 }
 
@@ -216,19 +222,19 @@ fn parse_wtime(timeline: &Timeline, input: &str, negate: bool) -> ParseResult<WT
     }
 
     let (result, rest) = Time::parse_with_offset(timeline, input);
-    if rest.is_empty() {
+    if !rest.is_empty() {
         ParseResult::Invalid(())
     } else {
         result.map(WTime::Time)
     }
 }
 
-pub(crate) fn parse_issue(input: &str) -> ParseResult<IssueInput, ()> {
+pub(crate) fn parse_issue(input: &str, issue_parser: &IssueParserWithRecent) -> ParseResult<IssueInput, ()> {
     if input == "c" {
         ParseResult::Valid(IssueInput::Clipboard)
     } else if input.trim().is_empty() {
         ParseResult::None
     } else {
-        ParseResult::Valid(IssueInput::Input(input.to_string()))
+        issue_parser.parse_task(input).r.map(|issue| IssueInput::Match(issue.ident))
     }
 }

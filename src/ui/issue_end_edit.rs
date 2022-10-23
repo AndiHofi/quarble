@@ -2,7 +2,7 @@ use iced_native::widget::{text_input, Column, Row};
 use iced_wgpu::TextInput;
 
 use crate::conf::SettingsRef;
-use crate::data::{ActiveDay, JiraIssue, WorkEnd};
+use crate::data::{Action, ActiveDay, JiraIssue, WorkEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::{IssueParsed, IssueParser};
@@ -10,6 +10,7 @@ use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{day_info_message, style, text, time_info, MainView, Message, QElement};
+use crate::ui::stay_active::StayActive;
 
 #[derive(Clone, Debug)]
 pub enum IssueEndMessage {
@@ -53,19 +54,6 @@ impl IssueEndEdit {
         })
     }
 
-    fn update_input(&mut self, input: String) {
-        self.input = input;
-        let guard = self.settings.load();
-        let (time, input) = Time::parse_with_offset(&guard.timeline, &self.input);
-        self.time = time;
-        let IssueParsed { r, rest, .. } = guard.issue_parser.parse_task(input.trim_start());
-        if rest.is_empty() {
-            self.issue = r;
-        } else {
-            self.issue = ParseResult::Invalid(());
-        }
-    }
-
 }
 
 impl SingleEditUi<WorkEnd> for IssueEndEdit {
@@ -93,6 +81,21 @@ impl SingleEditUi<WorkEnd> for IssueEndEdit {
             }
             _ => None,
         }
+    }
+
+    fn update_input(&mut self, input: String) -> Option<Message> {
+        self.input = input;
+        let guard = self.settings.load();
+        let (time, input) = Time::parse_with_offset(&guard.timeline, &self.input);
+        self.time = time;
+        let IssueParsed { r, rest, .. } = guard.issue_parser.parse_task(input.trim_start());
+        if rest.is_empty() {
+            self.issue = r;
+        } else {
+            self.issue = ParseResult::Invalid(());
+        }
+
+        None
     }
 }
 
@@ -135,8 +138,7 @@ impl MainView for IssueEndEdit {
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Ie(IssueEndMessage::InputChanged(text)) => {
-                self.update_input(text);
-                None
+                self.update_input(text)
             }
             Message::SubmitCurrent(stay_active) => {
                 Self::on_submit_message(self.try_build(), &mut self.orig, stay_active)

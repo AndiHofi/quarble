@@ -1,15 +1,17 @@
 use iced_core::Length;
 use iced_native::widget::text_input::State;
 use iced_native::widget::{Row, Text};
-use iced_winit::widget::{Column, text_input};
+use iced_winit::widget::{text_input, Column};
+use regex::internal::Input;
 
 use parsing::WorkBuilder;
 
 use crate::conf::SettingsRef;
 use crate::data::{Action, ActiveDay, CurrentWork, JiraIssue, RecentIssuesRef, Work, WorkEntry};
+use crate::parsing::IssueParserWithRecent;
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
-use crate::ui::book_single::nparsing::{IssueInput, ValidWorkData, WorkData, WTime};
+use crate::ui::book_single::nparsing::{IssueInput, ValidWorkData, WTime, WorkData};
 use crate::ui::clip_read::ClipRead;
 use crate::ui::focus_handler::FocusHandler;
 use crate::ui::my_text_input::MyTextInput;
@@ -17,7 +19,7 @@ use crate::ui::single_edit_ui::SingleEditUi;
 use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{day_info_message, MainView, Message, QElement, style, text, time_info};
+use crate::ui::{day_info_message, style, text, time_info, MainView, Message, QElement};
 use crate::util::Timeline;
 
 mod nparsing;
@@ -30,8 +32,6 @@ pub enum BookSingleMessage {
 
 pub struct BookSingleUI {
     top_bar: TopBar,
-    input_state: text_input::State,
-    input: String,
     builder: WorkData,
     settings: SettingsRef,
     orig: Option<WorkEntry>,
@@ -66,9 +66,21 @@ impl SingleEditUi<WorkEntry> for BookSingleUI {
     }
 
     fn set_orig(&mut self, orig: WorkEntry) {
-        let input = self.as_text(&orig);
+        match &orig {
+            WorkEntry::Work(Work {start, end, task: JiraIssue{ident, ..}, description}) => {
+                self.start.text = start.to_string();
+                self.end.text = end.to_string();
+                self.id.text = ident.to_string();
+                self.comment.text = description.to_string();
+            }
+            WorkEntry::Current(CurrentWork {start, task: JiraIssue{ident, ..}, description}) => {
+                self.start.text = start.to_string();
+                self.end.text = "-".to_string();
+                self.id.text = ident.to_string();
+                self.comment.text = description.to_string();
+            }
+        }
         self.orig = Some(orig);
-        self.update_input(input);
     }
 
     fn try_build(&self) -> Option<WorkEntry> {
@@ -122,22 +134,28 @@ impl SingleEditUi<WorkEntry> for BookSingleUI {
                 self.end.text = orig.end.to_string();
                 self.id.text = orig.task.ident.to_string();
                 self.comment.text = orig.description.to_string();
-
             }
         }
         self.set_orig(orig);
         self.remove_focus();
         self.start.input.focus();
     }
-}
 
-impl BookSingleUI {
     fn update_input(&mut self, input: String) -> Option<Message> {
-        self.input = input;
-        let recent = self.recent_issues.borrow();
+        let text_follow_up = if self.start.is_focused() {
+            self.start.accept_input(input)
+        } else if self.end.is_focused() {
+            self.end.accept_input(input)
+        } else if self.id.is_focused() {
+            self.id.accept_input(input)
+        } else if self.comment.is_focused() {
+            self.comment.accept_input(input)
+        } else {
+            None
+        };
 
-        if let Some(follow_up) = self.follow_up_msg() {
-            return Some(follow_up);
+        if text_follow_up.is_some() {
+            return text_follow_up;
         }
 
         if self.id.is_focused() || self.comment.is_focused() {
@@ -147,8 +165,12 @@ impl BookSingleUI {
             ));
         }
 
-        None
+        self.follow_up_msg()
     }
+}
+
+impl BookSingleUI {
+
 
     pub fn for_active_day(
         settings: SettingsRef,
@@ -165,8 +187,6 @@ impl BookSingleUI {
                 info: day_info_message(active_day),
                 settings: settings.clone(),
             },
-            input_state: text_input::State::focused(),
-            input: "".to_string(),
             builder: Default::default(),
             settings,
             orig: None,
@@ -191,11 +211,18 @@ impl BookSingleUI {
     }
 
     fn validate(&mut self) {
-        let load = self.settings.load();
-        let timeline = &load.timeline;
+        let settings = self.settings.load();
+        let timeline = &settings.timeline;
+        let recent_issues = self.recent_issues.borrow();
+        let issue_parser = IssueParserWithRecent::new(&settings.issue_parser, &recent_issues);
         self.builder.start = nparsing::parse_start(&self.start.text, self.last_end, timeline);
         self.builder.end = nparsing::parse_end(&self.end.text, self.last_end, timeline);
-        self.builder.task = nparsing::parse_issue(&self.id.text);
+        self.builder.task = nparsing::parse_issue(&self.id.text, &issue_parser);
+        self.builder.msg = if self.comment.text.as_str().trim().is_empty() {
+            None
+        } else {
+            Some(self.comment.text.trim().to_string())
+        }
     }
 }
 
@@ -250,21 +277,10 @@ impl MainView for BookSingleUI {
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Bs(BookSingleMessage::TextChanged(msg)) => {
-                self.update_input(msg);
-                self.follow_up_msg()
+                self.update_input(msg)
             }
             Message::TextChanged(input) => {
-                if self.start.is_focused() {
-                    self.start.accept_input(input)
-                } else if self.end.is_focused() {
-                    self.end.accept_input(input)
-                } else if self.id.is_focused() {
-                    self.id.accept_input(input)
-                } else if self.comment.is_focused() {
-                    self.comment.accept_input(input)
-                } else {
-                    None
-                }
+                self.update_input(input)
             }
             Message::Next => self.focus_next(),
             Message::Previous => self.focus_previous(),
@@ -273,6 +289,8 @@ impl MainView for BookSingleUI {
                 None
             }
             Message::SubmitCurrent(stay_active) => {
+                self.validate();
+                dbg!(&self.builder);
                 Self::on_submit_message(self.try_build(), &mut self.orig, stay_active)
             }
             Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
@@ -292,9 +310,9 @@ fn task_info<'a>(v: ParseResult<&'a IssueInput, &'a ()>, clipboard: &'a ClipRead
 
 fn task_text(t: &IssueInput) -> QElement {
     let t = match t {
-        IssueInput::Input(s) => s.as_str(),
         IssueInput::Match(s) => s.as_str(),
-        IssueInput::Clipboard => "<clip>"
+        IssueInput::Recent(j) => j.ident.as_str(),
+        IssueInput::Clipboard => "<clip>",
     };
     text(t)
 }
@@ -304,7 +322,9 @@ fn tord_info<'a>(now: Time, last_end: Option<Time>, v: ParseResult<WTime, ()>) -
         v.get()
             .map(|e| match e {
                 WTime::Time(t) => t.to_string(),
-                WTime::Last => last_end.map(|t|t.to_string()).unwrap_or_else(|| "no pred".to_string()),
+                WTime::Last => last_end
+                    .map(|t| t.to_string())
+                    .unwrap_or_else(|| "no pred".to_string()),
                 WTime::Now => now.to_string(),
                 WTime::Empty => "-".to_string(),
             })

@@ -39,6 +39,9 @@ where
             None
         }
     }
+
+    fn update_input(&mut self, input: String) -> Option<Message>;
+
     #[cfg(test)]
     fn parse_input(&mut self, input: &str) {
         self.update_input(input.to_string());
