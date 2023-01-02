@@ -24,19 +24,18 @@ where
     where
         T: Into<Action>,
     {
-        if let Some(action) = result {
-            let action = action.into();
-            if let Some(orig) = std::mem::take(original) {
-                Some(Message::ModifyAction {
-                    stay_active,
-                    orig: Box::new(orig.into()),
-                    update: Box::new(action),
-                })
-            } else {
-                Some(Message::StoreAction(stay_active, action))
-            }
+        let Some(action) = result else {
+            return None;
+        };
+
+        if let Some(orig) = std::mem::take(original) {
+            Some(Message::ModifyAction {
+                stay_active,
+                orig: Box::new(orig.into()),
+                update: Box::new(action.into()),
+            })
         } else {
-            None
+            Some(Message::StoreAction(stay_active, action.into()))
         }
     }
 

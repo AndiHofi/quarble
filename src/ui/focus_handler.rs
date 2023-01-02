@@ -22,7 +22,7 @@ where
 
     fn focus_next(&'a mut self) -> Option<Message> {
         let mut order = self.focus_order();
-        let mut order: &mut [&mut text_input::State] = order.as_mut();
+        let order: &mut [&mut text_input::State] = order.as_mut();
         focus_next(order, Self::rotate())
     }
 

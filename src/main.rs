@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 #![allow(clippy::or_fun_call)]
+extern crate core;
+
 use std::cell::RefCell;
 use std::fs::OpenOptions;
 use std::io::{BufReader, Write};

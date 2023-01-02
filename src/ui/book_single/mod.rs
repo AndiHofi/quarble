@@ -1,26 +1,20 @@
 use iced_core::Length;
-use iced_native::widget::text_input::State;
 use iced_native::widget::{Row, Text};
 use iced_winit::widget::{text_input, Column};
-use regex::internal::Input;
-
-use parsing::WorkBuilder;
 
 use crate::conf::SettingsRef;
-use crate::data::{Action, ActiveDay, CurrentWork, JiraIssue, RecentIssuesRef, Work, WorkEntry};
-use crate::parsing::IssueParserWithRecent;
+use crate::data::{ActiveDay, CurrentWork, JiraIssue, RecentIssuesRef, Work, WorkEntry};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
+use crate::parsing::IssueParserWithRecent;
 use crate::ui::book_single::nparsing::{IssueInput, ValidWorkData, WTime, WorkData};
 use crate::ui::clip_read::ClipRead;
 use crate::ui::focus_handler::FocusHandler;
 use crate::ui::my_text_input::MyTextInput;
 use crate::ui::single_edit_ui::SingleEditUi;
-use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{day_info_message, style, text, time_info, MainView, Message, QElement};
-use crate::util::Timeline;
+use crate::ui::{day_info_message, style, text, MainView, Message, QElement};
 
 mod nparsing;
 mod parsing;
@@ -42,15 +36,17 @@ pub struct BookSingleUI {
     end: MyTextInput,
     id: MyTextInput,
     comment: MyTextInput,
+    description: MyTextInput,
 }
 
-impl<'a> FocusHandler<'a, [&'a mut text_input::State; 4]> for BookSingleUI {
-    fn focus_order(&'a mut self) -> [&'a mut State; 4] {
+impl<'a> FocusHandler<'a, [&'a mut text_input::State; 5]> for BookSingleUI {
+    fn focus_order(&'a mut self) -> [&'a mut text_input::State; 5] {
         [
             &mut self.start.input,
             &mut self.end.input,
             &mut self.id.input,
             &mut self.comment.input,
+            &mut self.description.input,
         ]
     }
 }
@@ -67,13 +63,22 @@ impl SingleEditUi<WorkEntry> for BookSingleUI {
 
     fn set_orig(&mut self, orig: WorkEntry) {
         match &orig {
-            WorkEntry::Work(Work {start, end, task: JiraIssue{ident, ..}, description}) => {
+            WorkEntry::Work(Work {
+                start,
+                end,
+                task: JiraIssue { ident, .. },
+                description,
+            }) => {
                 self.start.text = start.to_string();
                 self.end.text = end.to_string();
                 self.id.text = ident.to_string();
                 self.comment.text = description.to_string();
             }
-            WorkEntry::Current(CurrentWork {start, task: JiraIssue{ident, ..}, description}) => {
+            WorkEntry::Current(CurrentWork {
+                start,
+                task: JiraIssue { ident, .. },
+                description,
+            }) => {
                 self.start.text = start.to_string();
                 self.end.text = "-".to_string();
                 self.id.text = ident.to_string();
@@ -150,6 +155,8 @@ impl SingleEditUi<WorkEntry> for BookSingleUI {
             self.id.accept_input(input)
         } else if self.comment.is_focused() {
             self.comment.accept_input(input)
+        } else if self.description.is_focused() {
+            self.description.accept_input(input)
         } else {
             None
         };
@@ -170,8 +177,6 @@ impl SingleEditUi<WorkEntry> for BookSingleUI {
 }
 
 impl BookSingleUI {
-
-
     pub fn for_active_day(
         settings: SettingsRef,
         recent_issues: RecentIssuesRef,
@@ -192,10 +197,11 @@ impl BookSingleUI {
             orig: None,
             recent_issues,
             last_end,
-            start: MyTextInput::msg_aware("", nparsing::time_input),
-            end: MyTextInput::msg_aware("", nparsing::time_input),
-            id: MyTextInput::msg_aware("", nparsing::issue_input),
-            comment: MyTextInput::new("Comment", |_| true),
+            start: MyTextInput::msg_aware("", nparsing::time_input).with_placeholder("start"),
+            end: MyTextInput::msg_aware("", nparsing::time_input).with_placeholder("end"),
+            id: MyTextInput::msg_aware("", nparsing::issue_input).with_placeholder("Issue"),
+            comment: MyTextInput::msg_aware("", nparsing::comment_input).with_placeholder("Comment"),
+            description: MyTextInput::new("", |_| true).with_placeholder("Description"),
         });
         result.start.input.focus();
         result
@@ -215,14 +221,21 @@ impl BookSingleUI {
         let timeline = &settings.timeline;
         let recent_issues = self.recent_issues.borrow();
         let issue_parser = IssueParserWithRecent::new(&settings.issue_parser, &recent_issues);
-        self.builder.start = nparsing::parse_start(&self.start.text, self.last_end, timeline);
-        self.builder.end = nparsing::parse_end(&self.end.text, self.last_end, timeline);
+        self.builder.start = nparsing::parse_start(&self.start.text, timeline);
+        self.builder.end = nparsing::parse_end(&self.end.text, timeline);
         self.builder.task = nparsing::parse_issue(&self.id.text, &issue_parser);
-        self.builder.msg = if self.comment.text.as_str().trim().is_empty() {
+        let comment = self.comment.text.as_str().trim();
+        self.builder.msg = if comment.is_empty() {
             None
         } else {
-            Some(self.comment.text.trim().to_string())
-        }
+            Some(comment.to_string())
+        };
+        let description = self.description.text.trim();
+        self.builder.description = if description.is_empty() {
+            None
+        } else {
+            Some(description.to_string())
+        };
     }
 }
 
@@ -235,7 +248,9 @@ impl MainView for BookSingleUI {
             h_space(style::SPACE),
             self.id.show_text_input(Length::Units(100)).into(),
             h_space(style::SPACE),
-            self.comment.show_text_input(Length::Fill).into(),
+            self.comment.show_text_input(Length::Units(350)).into(),
+            h_space(style::SPACE),
+            self.description.show_text_input(Length::Fill).into(),
         ]);
 
         let now = self.settings.load().timeline.time_now();
@@ -255,13 +270,11 @@ impl MainView for BookSingleUI {
             h_space(style::DSPACE),
             text("Message:"),
             h_space(style::SPACE),
-            text(
-                self.builder
-                    .msg
-                    .as_ref()
-                    .map(|e| e.as_ref())
-                    .unwrap_or("<no message>"),
-            ),
+            text(self.builder.msg.as_deref().unwrap_or("<no message>")),
+            h_space(style::DSPACE),
+            text("Description:"),
+            h_space(style::SPACE),
+            text(self.builder.msg.as_deref().unwrap_or("<no description>")),
         ]);
 
         Column::with_children(vec![
@@ -276,15 +289,12 @@ impl MainView for BookSingleUI {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::Bs(BookSingleMessage::TextChanged(msg)) => {
-                self.update_input(msg)
-            }
-            Message::TextChanged(input) => {
-                self.update_input(input)
-            }
+            Message::Bs(BookSingleMessage::TextChanged(msg)) => self.update_input(msg),
+            Message::TextChanged(input) => self.update_input(input),
             Message::Next => self.focus_next(),
             Message::Previous => self.focus_previous(),
             Message::ClipboardValue(v) => {
+                dbg!("Clipboard value", &v);
                 self.builder.apply_clipboard(v);
                 None
             }
@@ -322,6 +332,7 @@ fn tord_info<'a>(now: Time, last_end: Option<Time>, v: ParseResult<WTime, ()>) -
         v.get()
             .map(|e| match e {
                 WTime::Time(t) => t.to_string(),
+                WTime::Relative(r) => r.to_string(),
                 WTime::Last => last_end
                     .map(|t| t.to_string())
                     .unwrap_or_else(|| "no pred".to_string()),

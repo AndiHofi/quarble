@@ -5,6 +5,7 @@ use iced_native::widget::{text_input, Row, TextInput};
 
 pub struct MyTextInput {
     pub text: String,
+    pub placeholder: String,
     pub input: text_input::State,
     pub accept_input_fn: Box<dyn Fn(&str) -> (bool, Option<Message>)>,
     pub error: Option<String>,
@@ -41,10 +42,16 @@ impl MyTextInput {
     {
         Self {
             text: text.to_string(),
+            placeholder: String::new(),
             input: text_input::State::new(),
             accept_input_fn: Box::new(accept),
             error: None,
         }
+    }
+
+    pub fn with_placeholder(mut self, placeholder: &str) -> Self {
+        self.placeholder = placeholder.to_string();
+        self
     }
 
 
@@ -62,7 +69,7 @@ impl MyTextInput {
     }
 
     pub fn show_text_input(&mut self, width: Length) -> TextInput<Message, QRenderer> {
-        TextInput::new(&mut self.input, "", &self.text, Message::TextChanged)
+        TextInput::new(&mut self.input, &self.placeholder, &self.text, Message::TextChanged)
             .padding(style::TEXT_INPUT_PADDING)
             .size(style::FONT_SIZE)
             .style(style::TextInput {

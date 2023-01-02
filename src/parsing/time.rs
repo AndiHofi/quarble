@@ -231,9 +231,11 @@ lazy_static::lazy_static! {
 impl From<Time> for chrono::NaiveTime {
     fn from(t: Time) -> Self {
         if t.h == 24 {
-            chrono::NaiveTime::from_hms(23, 59, 59)
+            chrono::NaiveTime::from_hms_opt(23, 59, 59).unwrap()
         } else {
-            chrono::NaiveTime::from_hms(t.h(), t.m(), 0)
+            let hour = t.h();
+            let min = t.m();
+            chrono::NaiveTime::from_hms_opt(hour, min, 0).unwrap()
         }
     }
 }
@@ -290,6 +292,19 @@ impl Sub for Time {
 
         let diff_minutes = l - r;
         TimeRelative::from_minutes(diff_minutes).unwrap()
+    }
+}
+
+impl Sub<TimeRelative> for Time {
+    type Output = Time;
+
+
+    fn sub(self, rhs: TimeRelative) -> Self::Output {
+        match self.try_add_relative(rhs) {
+            Some(r) => r,
+            None if rhs.is_negative() => Time::ZERO,
+            None => Time::MAX
+        }
     }
 }
 

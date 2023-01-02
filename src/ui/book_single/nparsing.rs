@@ -1,15 +1,16 @@
-use std::fmt::{Display, Formatter, write};
-use anyhow::anyhow;
-use lazy_static::lazy_static;
-use regex::Regex;
 use crate::data::{Action, CurrentWork, JiraIssue, Work};
-use crate::parsing::{IssueParser, IssueParserWithRecent, JiraIssueParser};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_relative::TimeRelative;
+use crate::parsing::{IssueParser, IssueParserWithRecent, JiraIssueParser};
 use crate::ui::clip_read::ClipRead;
 use crate::ui::Message;
 use crate::util::Timeline;
+use anyhow::anyhow;
+use lazy_static::lazy_static;
+use regex::Regex;
+use std::fmt::{write, Display, Formatter};
+use std::ops::Neg;
 
 /// UI model of the
 #[derive(Default, Debug)]
@@ -34,14 +35,27 @@ pub struct ValidWorkData<'a> {
 impl WorkData {
     pub fn init(&mut self, value: Value) {
         match value {
-            Value::Work(Work {start, end, task: JiraIssue{ident, description, ..}, description: action})  => {
+            Value::Work(Work {
+                start,
+                end,
+                task: JiraIssue {
+                    ident, description, ..
+                },
+                description: action,
+            }) => {
                 self.start = ParseResult::Valid(WTime::Time(start));
                 self.end = ParseResult::Valid(WTime::Time(end));
                 self.task = ParseResult::Valid(IssueInput::Match(ident));
                 self.msg = Some(action);
                 self.description = description;
             }
-            Value::CurrentWork(CurrentWork {start, task: JiraIssue{ident, description, ..}, description: action}) => {
+            Value::CurrentWork(CurrentWork {
+                start,
+                task: JiraIssue {
+                    ident, description, ..
+                },
+                description: action,
+            }) => {
                 self.start = ParseResult::Valid(WTime::Time(start));
                 self.end = ParseResult::Valid(WTime::Empty);
                 self.task = ParseResult::Valid(IssueInput::Match(ident));
@@ -52,6 +66,13 @@ impl WorkData {
     }
 
     pub fn try_as_work_data(&self, last: Option<Time>, now: Time) -> Option<ValidWorkData> {
+        #[derive(Copy, Clone)]
+        enum ABR {
+            Absolute(Time),
+            Relative(TimeRelative),
+            None,
+        }
+
         match self {
             WorkData {
                 start: ParseResult::Valid(start),
@@ -59,19 +80,27 @@ impl WorkData {
                 task: ParseResult::Valid(task),
                 msg,
                 description,
-                clipboard_reading: (ClipRead::None | ClipRead::NoClip),
+                clipboard_reading: ClipRead::None | ClipRead::NoClip,
                 ..
             } => {
-                let start = match start {
-                    WTime::Time(t) => Some(*t),
-                    WTime::Empty | WTime::Last => last,
-                    WTime::Now => Some(now)
+                let start_p = match start {
+                    WTime::Time(t) => ABR::Absolute(*t),
+                    WTime::Empty | WTime::Last => {
+                        if let Some(last) = last {
+                            ABR::Absolute(last)
+                        } else {
+                            ABR::None
+                        }
+                    }
+                    WTime::Relative(relative) => ABR::Relative(*relative),
+                    WTime::Now => ABR::Absolute(now),
                 };
 
-                let end = match end {
-                    WTime::Time(t) => Some(*t),
-                    WTime::Now => Some(now),
-                    WTime::Last if last.is_some()=> last,
+                let end_p = match end {
+                    WTime::Time(t) => ABR::Absolute(*t),
+                    WTime::Now => ABR::Absolute(now),
+                    WTime::Last if last.is_some() => ABR::Absolute(last.unwrap()),
+                    WTime::Relative(relative) => ABR::Relative(*relative),
                     WTime::Last | WTime::Empty => return None,
                 };
 
@@ -85,19 +114,33 @@ impl WorkData {
 
                 dbg!(task);
 
-                if let (Some(start), Some(task), Some(msg)) = (start, task, msg) {
+                let start = match (start_p, end_p) {
+                    (ABR::Absolute(start), _) => start,
+                    (ABR::None, _) => return None,
+                    (ABR::Relative(relative), ABR::Absolute(end)) => end + (-relative.abs()),
+                    _ => return None,
+                };
+
+                let end = match (start_p, end_p) {
+                    (_, ABR::Absolute(end)) => Some(end),
+                    (_, ABR::None) => return None,
+                    (ABR::Absolute(start), ABR::Relative(relative)) => Some(start + relative.abs()),
+                    _ => return None,
+                };
+
+                if let (start, Some(task), Some(msg)) = (start, task, msg) {
                     Some(ValidWorkData {
                         start,
                         end,
                         task,
                         msg,
-                        description: description.as_deref()
+                        description: description.as_deref(),
                     })
                 } else {
                     None
                 }
             }
-            _ => None
+            _ => None,
         }
     }
 
@@ -124,6 +167,7 @@ pub enum WTime {
     Last,
     Now,
     Time(Time),
+    Relative(TimeRelative),
     Empty,
 }
 
@@ -131,7 +175,7 @@ pub enum WTime {
 pub enum IssueInput {
     Recent(JiraIssue),
     Match(String),
-    Clipboard
+    Clipboard,
 }
 
 #[derive(Debug)]
@@ -140,11 +184,10 @@ pub enum Value {
     CurrentWork(CurrentWork),
 }
 
-
 impl TryFrom<Action> for Value {
     type Error = anyhow::Error;
     fn try_from(a: Action) -> Result<Self, Self::Error> {
-        match(a) {
+        match a {
             Action::Work(w) => Ok(Value::Work(w)),
             Action::CurrentWork(c) => Ok(Value::CurrentWork(c)),
             e => Err(anyhow!("Neither work, or current work: {e:?}")),
@@ -179,46 +222,45 @@ pub fn issue_input(input: &str) -> (bool, Option<Message>) {
     }
 }
 
+pub fn comment_input(input: &str) -> (bool, Option<Message>) {
+    if input.ends_with('#') {
+        (false, Some(Message::Next))
+    } else {
+        (true, None)
+    }
+}
+
 lazy_static! {
-    static ref TIME_INPUT: Regex = Regex::new(r#"(^[\-+0-9:hm]*$)|(^(no?)w?$)"#).unwrap();
+    static ref TIME_INPUT: Regex =
+        Regex::new(r#"(^[\-+0-9:hm]*$)|(^(no?)w?$)|(^((la?)s?)t?$)"#).unwrap();
     static ref ISSUE_INPUT: Regex = Regex::new(r#"^[0-9:a-zA-Z\-]*$"#).unwrap();
-
 }
 
-pub fn parse_start(input: &str, last_end: Option<Time>, timeline: &Timeline) -> ParseResult<WTime, ()> {
+pub fn parse_start(input: &str, timeline: &Timeline) -> ParseResult<WTime, ()> {
     let input = input.trim();
-    if input.is_empty() {
-        ParseResult::Valid(WTime::Last)
-    } else if input == "-" {
-        ParseResult::Valid(WTime::Empty)
-    } else if input == "n" || input == "now" {
-        ParseResult::Valid(WTime::Now)
-    } else {
-        parse_wtime(timeline, input, true)
+    match input {
+        "" | "l" | "last" => ParseResult::Valid(WTime::Last),
+        "-" => ParseResult::Valid(WTime::Empty),
+        "n" | "now" => ParseResult::Valid(WTime::Now),
+        input => parse_wtime(timeline, input),
     }
 }
 
-pub(crate) fn parse_end(input: &str, last_end: Option<Time>, timeline: &Timeline) -> ParseResult<WTime, ()> {
+pub(crate) fn parse_end(input: &str, timeline: &Timeline) -> ParseResult<WTime, ()> {
     let input = input.trim();
-    if input.is_empty()
-    || input == "n" || input == "now" {
+    if input.is_empty() || input == "n" || input == "now" {
         ParseResult::Valid(WTime::Now)
     } else if input == "-" {
         ParseResult::Valid(WTime::Empty)
     } else {
-        parse_wtime(timeline, input, false)
+        parse_wtime(timeline, input)
     }
 }
 
-fn parse_wtime(timeline: &Timeline, input: &str, negate: bool) -> ParseResult<WTime, ()> {
+fn parse_wtime(timeline: &Timeline, input: &str) -> ParseResult<WTime, ()> {
     let (result, rest) = TimeRelative::parse_duration(input);
     if let (ParseResult::Valid(result), "") = (result, rest) {
-        let r = if negate {
-            -result
-        } else {
-            result
-        };
-        return ParseResult::Valid(WTime::Time(timeline.time_now() + r));
+        return ParseResult::Valid(WTime::Relative(result));
     }
 
     let (result, rest) = Time::parse_with_offset(timeline, input);
@@ -229,12 +271,18 @@ fn parse_wtime(timeline: &Timeline, input: &str, negate: bool) -> ParseResult<WT
     }
 }
 
-pub(crate) fn parse_issue(input: &str, issue_parser: &IssueParserWithRecent) -> ParseResult<IssueInput, ()> {
+pub(crate) fn parse_issue(
+    input: &str,
+    issue_parser: &IssueParserWithRecent,
+) -> ParseResult<IssueInput, ()> {
     if input == "c" {
         ParseResult::Valid(IssueInput::Clipboard)
     } else if input.trim().is_empty() {
         ParseResult::None
     } else {
-        issue_parser.parse_task(input).r.map(|issue| IssueInput::Match(issue.ident))
+        issue_parser
+            .parse_task(input)
+            .r
+            .map(|issue| IssueInput::Match(issue.ident))
     }
 }

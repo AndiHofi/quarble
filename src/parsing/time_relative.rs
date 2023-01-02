@@ -171,7 +171,7 @@ mod parse {
 
     lazy_static! {
         static ref POSITIVE_DURATION_HOUR: Regex =
-            regex::Regex::new(r"^(?P<hour>[0-9]{1,2})h((?P<minute>[0-9]{1,2})m)?\b").unwrap();
+            regex::Regex::new(r"^(?P<hour>[0-9]{1,2})h((?P<minute>[0-9]{1,2})(m)?)?\b").unwrap();
         static ref POSITIVE_DURATION_MINUTE: Regex =
             Regex::new(r"^(?P<minute>[0-9]{1,3})m\b").unwrap();
         static ref RELATIVE_TIME_MIN: Regex =
