@@ -8,8 +8,10 @@ use crate::ui::fast_day_start::FastDayStart;
 use crate::ui::issue_end_edit::IssueEndEdit;
 use crate::ui::issue_start_edit::IssueStartEdit;
 use crate::ui::settings_ui::SettingsUI;
-use crate::ui::single_edit_ui::SingleEditUi;
+use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
 use crate::ui::{Exit, MainView, Message, QElement, ViewId};
+use iced_native::Command;
+use std::ops::Deref;
 
 pub enum CurrentView {
     Fds(Box<FastDayStart>),
@@ -43,33 +45,54 @@ impl CurrentView {
         settings: SettingsRef,
         recent_issues: RecentIssuesRef,
         active_day: Option<&ActiveDay>,
-    ) -> CurrentView {
+    ) -> (CurrentView, Option<Message>) {
         match id {
             ViewId::FastDayStart => {
-                CurrentView::Fds(FastDayStart::for_work_day(settings, active_day))
+                let ui = FastDayStart::for_work_day(settings, active_day);
+                let m = do_focus(&ui);
+                (CurrentView::Fds(ui), m)
             }
-            ViewId::FastDayEnd => CurrentView::Fde(FastDayEnd::for_work_day(settings, active_day)),
-            ViewId::BookSingle => CurrentView::Bs(BookSingleUI::for_active_day(
-                settings,
-                recent_issues,
-                active_day,
-            )),
-            ViewId::BookIssueStart => CurrentView::Is(IssueStartEdit::for_active_day(
-                settings,
-                recent_issues,
-                active_day,
-            )),
+            ViewId::FastDayEnd => {
+                let ui = FastDayEnd::for_work_day(settings, active_day);
+                let m = do_focus(&ui);
+                (CurrentView::Fde(ui), m)
+            },
+            ViewId::BookSingle => {
+                let ui = BookSingleUI::for_active_day(
+                    settings,
+                    recent_issues,
+                    active_day,
+                );
+                let m = do_focus(&ui);
+                (CurrentView::Bs(ui), m)
+            },
+            ViewId::BookIssueStart => {
+                let ui = IssueStartEdit::for_active_day(
+                    settings,
+                    recent_issues,
+                    active_day,
+                );
+                let m = do_focus(&ui);
+                (CurrentView::Is(ui), m)
+            },
             ViewId::BookIssueEnd => {
-                CurrentView::Ie(IssueEndEdit::for_active_day(settings, active_day))
+                let ui = IssueEndEdit::for_active_day(settings, active_day);
+                let m = do_focus(&ui);
+                (CurrentView::Ie(ui), m)
             }
             ViewId::CurrentDayUi => {
-                CurrentView::CdUi(CurrentDayUI::for_active_day(settings, active_day))
+                let ui = CurrentDayUI::for_active_day(settings, active_day);
+                (CurrentView::CdUi(ui), None)
             }
             ViewId::Export => {
-                CurrentView::Export(DayExportUi::for_active_day(settings, active_day))
+                (CurrentView::Export(DayExportUi::for_active_day(settings, active_day)), None)
             }
-            ViewId::Settings => CurrentView::Settings(SettingsUI::new(settings)),
-            ViewId::Exit => CurrentView::Exit(Exit),
+            ViewId::Settings => {
+                let ui = SettingsUI::new(settings);
+                let m = do_focus(&ui);
+                (CurrentView::Settings(ui), m)
+            },
+            ViewId::Exit => (CurrentView::Exit(Exit), Some(Message::Exit)),
         }
     }
 
@@ -78,45 +101,57 @@ impl CurrentView {
         settings: SettingsRef,
         recent_issues: RecentIssuesRef,
         active_day: Option<&ActiveDay>,
-    ) -> CurrentView {
+    ) -> (CurrentView, Option<Message>) {
         match value {
             Action::Work(a) => {
                 let mut ui = BookSingleUI::for_active_day(settings, recent_issues, active_day);
                 ui.entry_to_edit(WorkEntry::Work(a));
-                CurrentView::Bs(ui)
+                let m = do_focus(&ui);
+                (CurrentView::Bs(ui), m)
             }
             Action::CurrentWork(a) => {
                 let mut ui = BookSingleUI::for_active_day(settings, recent_issues, active_day);
                 ui.entry_to_edit(WorkEntry::Current(a));
-                CurrentView::Bs(ui)
+                let m = do_focus(&ui);
+                (CurrentView::Bs(ui), m)
             }
             Action::WorkStart(a) => {
                 let mut ui = IssueStartEdit::for_active_day(settings, recent_issues, active_day);
                 ui.entry_to_edit(a);
-                CurrentView::Is(ui)
+                let m = do_focus(&ui);
+                (CurrentView::Is(ui), m)
             }
             Action::WorkEnd(a) => {
                 let mut ui = IssueEndEdit::for_active_day(settings, active_day);
                 ui.entry_to_edit(a);
-                CurrentView::Ie(ui)
+                let m = do_focus(&ui);
+                (CurrentView::Ie(ui), m)
             }
             Action::DayStart(a) => {
                 let mut ui = FastDayStart::for_work_day(settings, active_day);
                 ui.entry_to_edit(a);
-                CurrentView::Fds(ui)
+                let m = do_focus(&ui);
+                (CurrentView::Fds(ui), m)
             }
             Action::DayEnd(a) => {
                 let mut ui = FastDayEnd::for_work_day(settings, active_day);
                 ui.entry_to_edit(a);
-                CurrentView::Fde(ui)
+                let m = do_focus(&ui);
+                (CurrentView::Fde(ui), m)
             }
-            _ => CurrentView::create(ViewId::CurrentDayUi, settings, recent_issues, active_day),
+            _ => {
+                CurrentView::create(ViewId::CurrentDayUi, settings, recent_issues, active_day)
+            }
         }
     }
 }
+fn do_focus<U: FocusableUi>(ui: &Box<U>) -> Option<Message> {
+    let x = ui.as_ref();
+    Some(Message::ForceFocus(x.default_focus()))
+}
 
 impl MainView for CurrentView {
-    fn view(&mut self) -> QElement {
+    fn view(&self) -> QElement {
         match self {
             CurrentView::Fds(v) => v.view(),
             CurrentView::Fde(v) => v.view(),

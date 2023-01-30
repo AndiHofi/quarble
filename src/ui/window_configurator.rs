@@ -1,6 +1,7 @@
 use iced_winit::settings::SettingsWindowConfigurator;
 use iced_winit::winit::dpi::LogicalSize;
 use iced_winit::winit::event_loop::EventLoopWindowTarget;
+use iced_winit::winit::platform::unix::WindowBuilderExtUnix;
 use iced_winit::winit::window::WindowBuilder;
 
 #[derive(Debug, Copy, Clone)]
@@ -22,8 +23,9 @@ impl<'a, A> iced_winit::window_configurator::WindowConfigurator<A> for MyWindowC
         self,
         window_target: &EventLoopWindowTarget<A>,
         window_builder: WindowBuilder,
+        _id: Option<String>
     ) -> WindowBuilder {
-        let window_builder = self.base.configure_builder(window_target, window_builder);
+        let window_builder = self.base.configure_builder(window_target, window_builder, _id);
         let window_builder = platform_specific(window_builder);
 
         let monitors: Vec<_> = window_target.available_monitors().collect();
@@ -64,8 +66,7 @@ impl<'a, A> iced_winit::window_configurator::WindowConfigurator<A> for MyWindowC
 
 #[cfg(target_os = "linux")]
 fn platform_specific(window_builder: WindowBuilder) -> WindowBuilder {
-    use iced_winit::winit::platform::unix::WindowBuilderExtUnix;
-    window_builder.with_app_id("quarble".to_string())
+    window_builder.with_name("quarble", "quarble")
 }
 
 #[cfg(not(target_os = "linux"))]

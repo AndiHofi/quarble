@@ -1,3 +1,5 @@
+use iced_native::widget::text_input;
+use iced_native::Command;
 use std::sync::Arc;
 
 use crate::data::{Action, Day, DayForwarder};
@@ -12,12 +14,14 @@ use crate::ui::settings_ui::SettingsUIMessage;
 use crate::ui::stay_active::StayActive;
 use crate::ui::ViewId;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum Message {
+    #[default]
     Update,
     Exit,
     Next,
     Previous,
+    ForceFocus(text_input::Id),
     NextTab,
     PrevTab,
     Up,
@@ -70,12 +74,8 @@ pub enum Message {
     Error(String),
     TextChanged(String),
     FilterRecent(Box<str>, Box<str>),
-}
-
-impl Default for Message {
-    fn default() -> Self {
-        Message::Update
-    }
+    Focus(text_input::Id),
+    Input(text_input::Id, String),
 }
 
 #[derive(Clone, Debug)]
@@ -83,3 +83,17 @@ pub struct EditAction(pub Box<Action>);
 
 #[derive(Clone, Debug)]
 pub struct DeleteAction(pub StayActive, pub Box<Action>);
+
+impl Into<Command<Message>> for Message {
+    fn into(self) -> Command<Message> {
+        let future = async move { self };
+
+        Command::single(iced_native::command::Action::Future(Box::pin(future)))
+    }
+}
+
+impl Message {
+    pub fn input<'a>(id: &'a text_input::Id) -> impl Fn(String) -> Message + 'a {
+        |text| Message::Input(id.clone(), text)
+    }
+}

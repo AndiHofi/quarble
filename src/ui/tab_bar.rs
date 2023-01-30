@@ -2,6 +2,7 @@ use crate::ui::style;
 use crate::ui::util::h_space;
 use crate::ui::{Message, QElement, ViewId};
 use iced_core::Length;
+use iced_native::theme;
 use iced_native::widget::Text;
 use iced_winit::widget::{button, Button, Row};
 
@@ -35,58 +36,28 @@ impl TabBar {
         }
     }
 
-    pub fn view(&mut self) -> QElement {
+    pub fn view(&self) -> QElement {
         let active = self.active_view;
 
         let buttons: Vec<QElement> = vec![
             h_space(style::TAB_SPACE),
-            tab_button(
-                active,
-                &mut self.current_day_ui,
-                "Overview (1)",
-                ViewId::CurrentDayUi,
-            ),
+            tab_button(active, "Overview (1)", ViewId::CurrentDayUi),
             h_space(style::TAB_SPACE),
-            tab_button(
-                active,
-                &mut self.fast_day_start,
-                "Start work (o)",
-                ViewId::FastDayStart,
-            ),
+            tab_button(active, "Start work (o)", ViewId::FastDayStart),
             h_space(style::TAB_SPACE),
-            tab_button(
-                active,
-                &mut self.fast_day_end,
-                "Stop work (l)",
-                ViewId::FastDayEnd,
-            ),
+            tab_button(active, "Stop work (l)", ViewId::FastDayEnd),
             h_space(style::TAB_SPACE),
-            tab_button(
-                active,
-                &mut self.book_single,
-                "Book issue (i)",
-                ViewId::BookSingle,
-            ),
+            tab_button(active, "Book issue (i)", ViewId::BookSingle),
             h_space(style::TAB_SPACE),
-            tab_button(
-                active,
-                &mut self.book_issue_start,
-                "Start issue (s)",
-                ViewId::BookIssueStart,
-            ),
+            tab_button(active, "Start issue (s)", ViewId::BookIssueStart),
             h_space(style::TAB_SPACE),
-            tab_button(
-                active,
-                &mut self.book_issue_end,
-                "End issue (e)",
-                ViewId::BookIssueEnd,
-            ),
+            tab_button(active, "End issue (e)", ViewId::BookIssueEnd),
             h_space(style::TAB_SPACE),
-            tab_button(active, &mut self.export, "Export (x)", ViewId::Export),
+            tab_button(active, "Export (x)", ViewId::Export),
             h_space(style::TAB_SPACE),
-            tab_button(active, &mut self.settings, "Settings (t)", ViewId::Settings),
+            tab_button(active, "Settings (t)", ViewId::Settings),
             h_space(Length::Fill),
-            tab_button(active, &mut self.exit, "x", ViewId::Exit),
+            tab_button(active, "x", ViewId::Exit),
             h_space(style::TAB_SPACE),
         ];
 
@@ -129,18 +100,13 @@ impl TabBar {
     }
 }
 
-fn tab_button<'a>(
-    active: ViewId,
-    s: &'a mut button::State,
-    text: &'static str,
-    v: ViewId,
-) -> QElement<'a> {
+fn tab_button<'a>(active: ViewId, text: &'static str, v: ViewId) -> QElement<'a> {
     let button =
-        Button::new(s, Text::new(text).font(style::button_font())).on_press(Message::ChangeView(v));
-    let style: Box<dyn button::StyleSheet + 'static> = if v == active {
+        Button::new(Text::new(text).font(style::button_font())).on_press(Message::ChangeView(v));
+    let style: Box<dyn button::StyleSheet<Style = iced_native::Theme> + 'static> = if v == active {
         Box::new(style::ActiveTab)
     } else {
         Box::new(style::Tab)
     };
-    button.style(style).into()
+    button.style(theme::Button::Custom(style)).into()
 }

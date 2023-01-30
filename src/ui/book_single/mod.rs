@@ -1,4 +1,5 @@
 use iced_core::Length;
+use iced_native::widget::text_input::{Action, Id};
 use iced_native::widget::{Row, Text};
 use iced_winit::widget::{text_input, Column};
 
@@ -11,7 +12,7 @@ use crate::ui::book_single::nparsing::{IssueInput, ValidWorkData, WTime, WorkDat
 use crate::ui::clip_read::ClipRead;
 use crate::ui::focus_handler::FocusHandler;
 use crate::ui::my_text_input::MyTextInput;
-use crate::ui::single_edit_ui::SingleEditUi;
+use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{day_info_message, style, text, MainView, Message, QElement};
@@ -37,18 +38,8 @@ pub struct BookSingleUI {
     id: MyTextInput,
     comment: MyTextInput,
     description: MyTextInput,
-}
 
-impl<'a> FocusHandler<'a, [&'a mut text_input::State; 5]> for BookSingleUI {
-    fn focus_order(&'a mut self) -> [&'a mut text_input::State; 5] {
-        [
-            &mut self.start.input,
-            &mut self.end.input,
-            &mut self.id.input,
-            &mut self.comment.input,
-            &mut self.description.input,
-        ]
-    }
+    has_focus: Option<text_input::Id>,
 }
 
 impl SingleEditUi<WorkEntry> for BookSingleUI {
@@ -142,20 +133,19 @@ impl SingleEditUi<WorkEntry> for BookSingleUI {
             }
         }
         self.set_orig(orig);
-        self.remove_focus();
-        self.start.input.focus();
     }
 
-    fn update_input(&mut self, input: String) -> Option<Message> {
-        let text_follow_up = if self.start.is_focused() {
+    fn update_input(&mut self, id: text_input::Id, input: String) -> Option<Message> {
+        let f = &self.has_focus;
+        let text_follow_up = if self.start.id == id {
             self.start.accept_input(input)
-        } else if self.end.is_focused() {
+        } else if self.end.id == id {
             self.end.accept_input(input)
-        } else if self.id.is_focused() {
+        } else if self.id.id == id {
             self.id.accept_input(input)
-        } else if self.comment.is_focused() {
+        } else if self.comment.id == id {
             self.comment.accept_input(input)
-        } else if self.description.is_focused() {
+        } else if self.description.id == id {
             self.description.accept_input(input)
         } else {
             None
@@ -165,7 +155,7 @@ impl SingleEditUi<WorkEntry> for BookSingleUI {
             return text_follow_up;
         }
 
-        if self.id.is_focused() || self.comment.is_focused() {
+        if self.id.is_focused(f) || self.comment.id == id {
             return Some(Message::FilterRecent(
                 self.id.text.as_str().into(),
                 self.comment.text.as_str().into(),
@@ -173,6 +163,12 @@ impl SingleEditUi<WorkEntry> for BookSingleUI {
         }
 
         self.follow_up_msg()
+    }
+}
+
+impl FocusableUi for BookSingleUI {
+    fn default_focus(&self) -> Id {
+        self.start.id.clone()
     }
 }
 
@@ -200,10 +196,12 @@ impl BookSingleUI {
             start: MyTextInput::msg_aware("", nparsing::time_input).with_placeholder("start"),
             end: MyTextInput::msg_aware("", nparsing::time_input).with_placeholder("end"),
             id: MyTextInput::msg_aware("", nparsing::issue_input).with_placeholder("Issue"),
-            comment: MyTextInput::msg_aware("", nparsing::comment_input).with_placeholder("Comment"),
+            comment: MyTextInput::msg_aware("", nparsing::comment_input)
+                .with_placeholder("Comment"),
             description: MyTextInput::new("", |_| true).with_placeholder("Description"),
+            has_focus: None,
         });
-        result.start.input.focus();
+
         result
     }
 
@@ -239,10 +237,13 @@ impl BookSingleUI {
     }
 }
 
+
 impl MainView for BookSingleUI {
-    fn view(&mut self) -> QElement {
+    fn view(&self) -> QElement {
         let input_line = Row::with_children(vec![
-            self.start.show_text_input(Length::Units(60)).into(),
+            self.start
+                .show_text_input(Length::Units(60))
+                .into(),
             h_space(style::SPACE),
             self.end.show_text_input(Length::Units(60)).into(),
             h_space(style::SPACE),
@@ -289,10 +290,7 @@ impl MainView for BookSingleUI {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::Bs(BookSingleMessage::TextChanged(msg)) => self.update_input(msg),
-            Message::TextChanged(input) => self.update_input(input),
-            Message::Next => self.focus_next(),
-            Message::Previous => self.focus_previous(),
+            Message::Input(id, input) => self.update_input(id, input),
             Message::ClipboardValue(v) => {
                 dbg!("Clipboard value", &v);
                 self.builder.apply_clipboard(v);
@@ -304,6 +302,10 @@ impl MainView for BookSingleUI {
                 Self::on_submit_message(self.try_build(), &mut self.orig, stay_active)
             }
             Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
+            Message::Focus(id) => {
+                self.has_focus = Some(id);
+                None
+            }
             _ => self.follow_up_msg(),
         }
     }

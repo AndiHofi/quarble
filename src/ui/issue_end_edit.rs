@@ -1,27 +1,25 @@
+use iced_native::widget::text_input::Id;
 use iced_native::widget::{text_input, Column, Row};
-use iced_wgpu::TextInput;
 
 use crate::conf::SettingsRef;
-use crate::data::{Action, ActiveDay, JiraIssue, WorkEnd};
+use crate::data::{ActiveDay, JiraIssue, WorkEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::{IssueParsed, IssueParser};
-use crate::ui::single_edit_ui::SingleEditUi;
+use crate::ui::my_text_input::MyTextInput;
+use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{day_info_message, style, text, time_info, MainView, Message, QElement};
-use crate::ui::stay_active::StayActive;
 
 #[derive(Clone, Debug)]
 pub enum IssueEndMessage {
     InputChanged(String),
 }
 
-#[derive(Debug)]
 pub struct IssueEndEdit {
     top_bar: TopBar,
-    input_state: text_input::State,
-    input: String,
+    input: MyTextInput,
     time: ParseResult<Time, ()>,
     issue: ParseResult<JiraIssue, ()>,
     settings: SettingsRef,
@@ -44,8 +42,7 @@ impl IssueEndEdit {
                 info: day_info_message(active_day),
                 settings: settings.clone(),
             },
-            input_state: text_input::State::focused(),
-            input: String::new(),
+            input: MyTextInput::new("", |_| true),
             time: ParseResult::Valid(guard.timeline.time_now()),
             settings,
             issue: ParseResult::None,
@@ -53,7 +50,6 @@ impl IssueEndEdit {
             orig: None,
         })
     }
-
 }
 
 impl SingleEditUi<WorkEnd> for IssueEndEdit {
@@ -64,7 +60,7 @@ impl SingleEditUi<WorkEnd> for IssueEndEdit {
     fn set_orig(&mut self, orig: WorkEnd) {
         let input = self.as_text(&orig);
         self.orig = Some(orig);
-        self.update_input(input);
+        self.update_default_input(input);
     }
 
     fn try_build(&self) -> Option<WorkEnd> {
@@ -83,10 +79,10 @@ impl SingleEditUi<WorkEnd> for IssueEndEdit {
         }
     }
 
-    fn update_input(&mut self, input: String) -> Option<Message> {
-        self.input = input;
+    fn update_input(&mut self, _id: text_input::Id, input: String) -> Option<Message> {
+        self.input.text = input;
         let guard = self.settings.load();
-        let (time, input) = Time::parse_with_offset(&guard.timeline, &self.input);
+        let (time, input) = Time::parse_with_offset(&guard.timeline, &self.input.text);
         self.time = time;
         let IssueParsed { r, rest, .. } = guard.issue_parser.parse_task(input.trim_start());
         if rest.is_empty() {
@@ -99,11 +95,15 @@ impl SingleEditUi<WorkEnd> for IssueEndEdit {
     }
 }
 
+impl FocusableUi for IssueEndEdit {
+    fn default_focus(&self) -> Id {
+        self.input.id.clone()
+    }
+}
+
 impl MainView for IssueEndEdit {
-    fn view(&mut self) -> QElement {
-        let input = TextInput::new(&mut self.input_state, "now", &self.input, |e| {
-            Message::Ie(IssueEndMessage::InputChanged(e))
-        });
+    fn view(&self) -> QElement {
+        let input = self.input.show("now");
 
         let issue_text: String = if let ParseResult::Valid(i) = &self.issue {
             i.ident.clone()
@@ -137,9 +137,7 @@ impl MainView for IssueEndEdit {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::Ie(IssueEndMessage::InputChanged(text)) => {
-                self.update_input(text)
-            }
+            Message::Input(id, input) => self.update_input(id, input),
             Message::SubmitCurrent(stay_active) => {
                 Self::on_submit_message(self.try_build(), &mut self.orig, stay_active)
             }

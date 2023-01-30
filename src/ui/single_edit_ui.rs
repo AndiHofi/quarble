@@ -1,8 +1,16 @@
+use iced_native::Command;
+use iced_native::widget::text_input;
 use crate::data::Action;
 use crate::ui::stay_active::StayActive;
 use crate::ui::Message;
 
-pub trait SingleEditUi<T>
+pub trait FocusableUi {
+
+    fn default_focus(&self) -> text_input::Id;
+}
+
+
+pub trait SingleEditUi<T> : FocusableUi
 where
     T: Into<Action>,
 {
@@ -39,16 +47,21 @@ where
         }
     }
 
-    fn update_input(&mut self, input: String) -> Option<Message>;
+    fn update_input(&mut self, id: text_input::Id, input: String) -> Option<Message>;
+
+    fn update_default_input(&mut self, input: String) -> Option<Message> {
+        self.update_input(self.default_focus(), input)
+    }
+
 
     #[cfg(test)]
     fn parse_input(&mut self, input: &str) {
-        self.update_input(input.to_string());
+        self.update_default_input(input.to_string());
     }
 
     #[cfg(test)]
     fn convert_input(&mut self, input: &str) -> Option<T> {
-        self.update_input(input.to_string());
+        self.update_default_input(input.to_string());
         self.try_build()
     }
 }

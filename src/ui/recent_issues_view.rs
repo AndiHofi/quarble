@@ -58,7 +58,7 @@ impl RecentIssuesView {
 }
 
 impl MainView for RecentIssuesView {
-    fn view(&mut self) -> QElement {
+    fn view(&self) -> QElement {
         let mut lines = Column::new();
         let mut current_row = Row::new();
 
@@ -100,7 +100,6 @@ fn build_recent(num: usize, recent: &RecentIssue) -> QElement {
         h_space(style::SPACE),
         text(description),
     ])
-    .max_width(600)
     .width(Length::Units(500))
     .into()
 }

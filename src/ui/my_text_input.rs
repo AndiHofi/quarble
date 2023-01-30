@@ -1,14 +1,29 @@
 use crate::ui::util::h_space;
 use crate::ui::{style, text, Message, QElement, QRenderer};
+use chrono::format::format;
 use iced_core::Length;
+use iced_native::theme;
+use iced_native::widget::text_input::{Action, Id};
 use iced_native::widget::{text_input, Row, TextInput};
+use std::fmt::{Debug, Formatter};
 
 pub struct MyTextInput {
+    pub id: Id,
     pub text: String,
     pub placeholder: String,
-    pub input: text_input::State,
     pub accept_input_fn: Box<dyn Fn(&str) -> (bool, Option<Message>)>,
+    pub focus_lost_fn: Box<dyn Fn(&mut MyTextInput) -> Option<Message>>,
     pub error: Option<String>,
+}
+
+impl Debug for MyTextInput {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MyTextInput(id={:?}, text={}, placeholder={}, error={:?}",
+            self.id, self.text, self.placeholder, self.error
+        )
+    }
 }
 
 impl MyTextInput {
@@ -24,7 +39,9 @@ impl MyTextInput {
         S: ToString,
         F: Fn(&str) -> bool + 'static,
     {
-        Self::msg_aware(text.map(|s|s.to_string()).unwrap_or_default(), move |i| (accept(i), None))
+        Self::msg_aware(text.map(|s| s.to_string()).unwrap_or_default(), move |i| {
+            (accept(i), None)
+        })
     }
 
     /// New text-input with input accept function
@@ -36,17 +53,26 @@ impl MyTextInput {
     /// * a boolean, true when the updated text is accepted
     /// * an optional Message to send - this can be used to change focus on specific inputs
     pub fn msg_aware<S, F>(text: S, accept: F) -> Self
-        where
-            S: ToString,
-            F: Fn(&str) -> (bool, Option<Message>) + 'static,
+    where
+        S: ToString,
+        F: Fn(&str) -> (bool, Option<Message>) + 'static,
     {
         Self {
+            id: Id::unique(),
             text: text.to_string(),
             placeholder: String::new(),
-            input: text_input::State::new(),
             accept_input_fn: Box::new(accept),
+            focus_lost_fn: Box::new(dummy_focus_lost),
             error: None,
         }
+    }
+
+    pub fn focus_lost<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(&mut MyTextInput) -> Option<Message> + 'static,
+    {
+        self.focus_lost_fn = Box::new(handler);
+        self
     }
 
     pub fn with_placeholder(mut self, placeholder: &str) -> Self {
@@ -54,12 +80,11 @@ impl MyTextInput {
         self
     }
 
-
-    pub fn show(&mut self, label: &'static str) -> QElement {
+    pub fn show(&self, label: &'static str) -> QElement {
         self.show_with_input_width(label, Length::Fill)
     }
 
-    pub fn show_with_input_width(&mut self, label: &'static str, width: Length) -> QElement {
+    pub fn show_with_input_width(&self, label: &'static str, width: Length) -> QElement {
         let mut result: Row<Message, QRenderer> = Row::new();
         result = result.push(text(label));
         result = result.push(h_space(style::SPACE));
@@ -68,18 +93,24 @@ impl MyTextInput {
         result.into()
     }
 
-    pub fn show_text_input(&mut self, width: Length) -> TextInput<Message, QRenderer> {
-        TextInput::new(&mut self.input, &self.placeholder, &self.text, Message::TextChanged)
+    pub fn show_text_input(&self, width: Length) -> TextInput<Message, QRenderer> {
+        TextInput::new(&self.placeholder, &self.text, Message::input(&self.id))
+            .id(self.id.clone())
             .padding(style::TEXT_INPUT_PADDING)
             .size(style::FONT_SIZE)
-            .style(style::TextInput {
+            .style(theme::TextInput::Custom(Box::new(style::TextInput {
                 error: self.error.is_some(),
-            })
+            })))
+            .on_action(focus_handler(self))
             .width(width)
     }
 
-    pub fn is_focused(&self) -> bool {
-        self.input.is_focused()
+    pub fn is_focused(&self, focused: &Option<text_input::Id>) -> bool {
+        if let Some(id) = focused {
+            self.id == *id
+        } else {
+            false
+        }
     }
 
     pub fn accept_input(&mut self, text: String) -> Option<Message> {
@@ -102,4 +133,15 @@ impl MyTextInput {
             }
         }
     }
+}
+
+fn focus_handler<'a>(input: &'a MyTextInput) -> impl Fn(Action) -> Option<Message> + 'a {
+    |ah| match ah {
+        Action::FocusGained => Some(Message::Focus(input.id.clone())),
+        _ => None,
+    }
+}
+
+fn dummy_focus_lost(_input: &mut MyTextInput) -> Option<Message> {
+    None
 }

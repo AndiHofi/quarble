@@ -2,10 +2,17 @@
 
 use crate::data::Day;
 use crate::parsing::time::Time;
+use crate::ui::Message;
 use arc_swap::ArcSwap;
+use iced_futures::BoxFuture;
+use iced_native::command::Action;
+use iced_native::Command;
 use std::fmt::Debug;
+use std::future::Future;
 use std::ops::Deref;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 use std::time::SystemTime;
 
 #[deprecated]
@@ -84,4 +91,15 @@ impl From<StaticTimeline> for Timeline {
     fn from(t: StaticTimeline) -> Self {
         Arc::new(t)
     }
+}
+
+enum MFuture<T: Send> {
+    Ready(Pin<T>),
+    Polled,
+}
+
+pub fn msg(m: Message) -> Command<Message> {
+    let future = async move {m};
+
+    Command::single(Action::Future(Box::pin(future)))
 }

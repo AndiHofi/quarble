@@ -1,15 +1,15 @@
-use crate::conf::{SettingsRef};
-use crate::data::{Action, ActiveDay, DayStart, Location};
+use crate::conf::SettingsRef;
+use crate::data::{ActiveDay, DayStart, Location};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeRange, TimeResult};
-use crate::ui::single_edit_ui::SingleEditUi;
+use crate::ui::my_text_input::MyTextInput;
+use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
 use crate::ui::top_bar::TopBar;
 use crate::ui::{day_info_message, style, unbooked_time, MainView, Message, QElement};
 use crate::util::Timeline;
-use iced_wgpu::TextInput;
+use iced_native::widget::text_input::Id;
 use iced_winit::widget::{text_input, Column, Row, Space, Text};
-use crate::ui::stay_active::StayActive;
 
 #[derive(Clone, Debug)]
 pub enum FastDayStartMessage {
@@ -18,8 +18,7 @@ pub enum FastDayStartMessage {
 
 pub struct FastDayStart {
     top_bar: TopBar,
-    text: String,
-    text_state: text_input::State,
+    text: MyTextInput,
     value: Option<DayStart>,
     limits: Vec<TimeRange>,
     builder: DayStartBuilder,
@@ -38,8 +37,7 @@ impl FastDayStart {
                 info: day_info_message(work_day),
                 settings,
             },
-            text: String::new(),
-            text_state: text_input::State::focused(),
+            text: MyTextInput::new("", |_| true),
             value: Some(DayStart {
                 location: Location::Office,
                 ts: timeline.time_now(),
@@ -53,7 +51,6 @@ impl FastDayStart {
             orig: None,
         })
     }
-
 }
 
 impl SingleEditUi<DayStart> for FastDayStart {
@@ -69,23 +66,29 @@ impl SingleEditUi<DayStart> for FastDayStart {
     fn set_orig(&mut self, orig: DayStart) {
         let input = self.as_text(&orig);
         self.orig = Some(orig);
-        self.update_input(input);
+        self.update_default_input(input);
     }
 
     fn try_build(&self) -> Option<DayStart> {
         self.builder.try_build(&self.timeline)
     }
 
-    fn update_input(&mut self, input: String) -> Option<Message> {
-        self.text = input;
+    fn update_input(&mut self, _id: text_input::Id, input: String) -> Option<Message> {
+        self.text.text = input;
         self.builder
-            .parse_value(&self.timeline, &self.limits, &self.text);
+            .parse_value(&self.timeline, &self.limits, &self.text.text);
         None
     }
 }
 
+impl FocusableUi for FastDayStart {
+    fn default_focus(&self) -> Id {
+        self.text.id.clone()
+    }
+}
+
 impl MainView for FastDayStart {
-    fn view(&mut self) -> QElement {
+    fn view(&self) -> QElement {
         let loc_str = match self.builder.location.as_ref() {
             ParseResult::Valid(t) => t.to_string(),
             ParseResult::Invalid(_) | ParseResult::Incomplete => "Invalid location".to_string(),
@@ -99,9 +102,7 @@ impl MainView for FastDayStart {
             ParseResult::None => "now".to_string(),
         };
 
-        let input_widget = TextInput::new(&mut self.text_state, "now", &self.text, move |input| {
-            on_input_change(input)
-        });
+        let input_widget = self.text.show("now");
 
         let status_row = Row::with_children(vec![
             Text::new(loc_str).into(),
@@ -121,9 +122,7 @@ impl MainView for FastDayStart {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::Fds(FastDayStartMessage::TextChanged(new_value)) => {
-                self.update_input(new_value)
-            }
+            Message::Input(id, input) => self.update_input(id, input),
             Message::SubmitCurrent(stay_active) => {
                 Self::on_submit_message(self.try_build(), &mut self.orig, stay_active)
             }

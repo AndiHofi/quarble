@@ -4,8 +4,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use iced_core::Length;
-use iced_native::widget::text_input::State;
-use iced_native::widget::{button, Button, Container, scrollable, Scrollable, text_input};
+use iced_native::widget::text_input::{Id, State};
+use iced_native::widget::{button, scrollable, text_input, Button, Container, Scrollable};
 use iced_native::widget::{Column, Row};
 use regex::Regex;
 
@@ -20,8 +20,9 @@ use crate::parsing::time_relative::TimeRelative;
 use crate::parsing::JiraIssueParser;
 use crate::ui::focus_handler::FocusHandler;
 use crate::ui::util::{h_space, v_space};
-use crate::ui::{MainView, Message, QElement, style, text};
+use crate::ui::{style, text, MainView, Message, QElement};
 use crate::{Settings, SettingsSer};
+use crate::ui::single_edit_ui::FocusableUi;
 
 mod shortcut_ui;
 
@@ -48,6 +49,8 @@ pub struct SettingsUI {
     submit_button: button::State,
     reset_button: button::State,
     settings_changed: bool,
+
+    current_focus: Option<text_input::Id>,
 }
 
 impl SettingsUI {
@@ -65,7 +68,7 @@ impl SettingsUI {
             ),
         }));
         let mut max_recent_issues = MyTextInput::new(o.max_recent_issues, accept_number);
-        max_recent_issues.input.focus();
+
         Box::new(Self {
             settings,
             original,
@@ -82,36 +85,37 @@ impl SettingsUI {
             submit_button: button::State::new(),
             reset_button: button::State::new(),
             settings_changed: false,
+            current_focus: None,
         })
     }
 
-    fn update_text(&mut self, text: String) -> Option<Message> {
-        if self.db_dir.is_focused() {
+    fn update_text(&mut self, id: text_input::Id, text: String) -> Option<Message> {
+        if self.db_dir.id == id {
             self.db_dir.text = text;
-        } else if self.resolution.is_focused() {
+        } else if self.resolution.id == id {
             self.resolution.accept_input(text);
-        } else if self.max_recent_issues.is_focused() {
+        } else if self.max_recent_issues.id == id {
             self.max_recent_issues.accept_input(text);
-        } else if self.default_break_start.is_focused() {
+        } else if self.default_break_start.id == id {
             self.default_break_start.accept_input(text);
-        } else if self.default_break_end.is_focused() {
+        } else if self.default_break_end.id == id {
             self.default_break_end.accept_input(text);
-        } else if self.min_breaks.is_focused() {
+        } else if self.min_breaks.id == id {
             self.min_breaks.accept_input(text);
-        } else if self.min_work.is_focused() {
+        } else if self.min_work.id == id {
             self.min_work.accept_input(text);
         } else {
             for sc in self.shortcuts.iter_mut() {
-                if sc.shortcut.is_focused() {
+                if sc.shortcut.id == id {
                     sc.shortcut.accept_input(text);
                     break;
-                } else if sc.id.is_focused() {
+                } else if sc.id.id == id {
                     sc.id.accept_input(text);
                     break;
-                } else if sc.description.is_focused() {
+                } else if sc.description.id == id {
                     sc.description.accept_input(text);
                     break;
-                } else if sc.default_action.is_focused() {
+                } else if sc.default_action.id == id {
                     sc.default_action.accept_input(text);
                     break;
                 }
@@ -306,31 +310,38 @@ impl SettingsUI {
     }
 }
 
+impl FocusableUi for SettingsUI {
+    fn default_focus(&self) -> Id {
+        self.db_dir.id.clone()
+    }
+}
+
 type VResult<T> = Result<T, String>;
 
 impl<'a> FocusHandler<'a, Vec<&'a mut text_input::State>> for SettingsUI {
     fn focus_order(&'a mut self) -> Vec<&'a mut State> {
-        let mut result = vec![
-            &mut self.db_dir.input,
-            &mut self.resolution.input,
-            &mut self.max_recent_issues.input,
-            &mut self.min_breaks.input,
-            &mut self.min_work.input,
-            &mut self.default_break_start.input,
-            &mut self.default_break_end.input,
-        ];
-        for e in &mut self.shortcuts {
-            result.push(&mut e.shortcut.input);
-            result.push(&mut e.id.input);
-            result.push(&mut e.description.input);
-            result.push(&mut e.default_action.input);
-        }
-        result
+        // let mut result = vec![
+        //     &mut self.db_dir.input,
+        //     &mut self.resolution.input,
+        //     &mut self.max_recent_issues.input,
+        //     &mut self.min_breaks.input,
+        //     &mut self.min_work.input,
+        //     &mut self.default_break_start.input,
+        //     &mut self.default_break_end.input,
+        // ];
+        // for e in &mut self.shortcuts {
+        //     result.push(&mut e.shortcut.input);
+        //     result.push(&mut e.id.input);
+        //     result.push(&mut e.description.input);
+        //     result.push(&mut e.default_action.input);
+        // }
+        // result
+        vec![]
     }
 }
 
 impl MainView for SettingsUI {
-    fn view(&mut self) -> QElement {
+    fn view(&self) -> QElement {
         let breaks_dur = Row::with_children(vec![
             self.min_breaks
                 .show_with_input_width("Required break (Minutes):", Length::Units(60)),
@@ -347,26 +358,28 @@ impl MainView for SettingsUI {
                 .show_with_input_width("Default break end (hh:mm):", Length::Units(60)),
         ]);
 
-        let mut shortcuts = Scrollable::new(&mut self.shortcuts_scroll)
-            .width(Length::Fill)
-            .padding(style::WINDOW_PADDING)
-            .spacing(4);
-        for sc in self.shortcuts.iter_mut() {
-            shortcuts = shortcuts.push(sc.show());
-        }
+        let shortcuts: Vec<_> = self.shortcuts.iter().map(|sc| sc.show()).collect();
+
+        let mut shortcuts = Scrollable::new(
+            Column::with_children(shortcuts)
+                .width(Length::Fill)
+                .padding(style::WINDOW_PADDING),
+        );
+
         let shortcuts = Container::new(shortcuts)
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(style::ContentStyle);
+            .padding(style::WINDOW_PADDING)
+            .style(style::container_style(style::ContentStyle));
 
-        let mut reset_button = Button::new(&mut self.reset_button, text("Reset")).style(style::Tab);
+        let mut reset_button = Button::new(text("Reset")).style(style::button_style(style::Tab));
         if self.settings_changed {
             reset_button =
                 reset_button.on_press(Message::SettingsUi(SettingsUIMessage::ResetSettings))
         }
 
-        let submit_button = Button::new(&mut self.submit_button, text("Submit"))
-            .style(style::Tab)
+        let submit_button = Button::new(text("Submit"))
+            .style(style::button_style(style::Tab))
             .on_press(Message::SettingsUi(SettingsUIMessage::SubmitSettings));
 
         let content = Column::with_children(vec![
@@ -394,7 +407,7 @@ impl MainView for SettingsUI {
             Row::with_children(vec![
                 text("Configured shortcuts:"),
                 h_space(Length::Fill),
-                style::inline_button(&mut self.add_shortcut_button, "+")
+                style::inline_button("+")
                     .on_press(Message::SettingsUi(SettingsUIMessage::AddShortcut))
                     .into(),
             ])
@@ -407,12 +420,13 @@ impl MainView for SettingsUI {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::TextChanged(value) => self.update_text(value),
+            Message::Input(id, value) => self.update_text(id, value),
             Message::SettingsUi(SettingsUIMessage::AddShortcut) => {
-                self.shortcuts.push(ShortCutUi::empty());
-                self.shortcuts.last_mut().unwrap().shortcut.input.focus();
+                let new_shortcut = ShortCutUi::empty();
+                let to_focus = new_shortcut.shortcut.id.clone();
+                self.shortcuts.push(new_shortcut);
                 self.shortcuts_scroll.snap_to(1.0);
-                None
+                Some(Message::ForceFocus(to_focus))
             }
             Message::SettingsUi(SettingsUIMessage::ResetSettings) => {
                 let settings = self.settings.clone();

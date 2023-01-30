@@ -1,13 +1,13 @@
 use iced_native::widget::{text_input, Column, Row};
-use iced_wgpu::TextInput;
 
 use crate::conf::SettingsRef;
-use crate::data::{Action, ActiveDay, JiraIssue, RecentIssues, RecentIssuesRef, WorkStart};
+use crate::data::{ActiveDay, JiraIssue, RecentIssues, RecentIssuesRef, WorkStart};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::{parse_issue_clipboard, IssueParsed, IssueParser, IssueParserWithRecent};
 use crate::ui::clip_read::ClipRead;
-use crate::ui::single_edit_ui::SingleEditUi;
+use crate::ui::my_text_input::MyTextInput;
+use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
 use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
@@ -19,17 +19,17 @@ pub enum IssueStartMessage {
     TextChanged(String),
 }
 
-#[derive(Debug)]
 pub struct IssueStartEdit {
     top_bar: TopBar,
-    input_state: text_input::State,
-    input: String,
+    input: MyTextInput,
     builder: IssueStartBuilder,
     settings: SettingsRef,
     orig: Option<WorkStart>,
     last_end: Option<Time>,
     recent_issues: RecentIssuesRef,
 }
+
+const INPUT_ID: &str = "ISE01";
 
 impl IssueStartEdit {
     pub fn for_active_day(
@@ -46,8 +46,7 @@ impl IssueStartEdit {
                 info: day_info_message(active_day),
                 settings: settings.clone(),
             },
-            input_state: text_input::State::focused(),
-            input: String::new(),
+            input: MyTextInput::new("", |_| true),
             builder: IssueStartBuilder::default(),
             settings,
             orig: None,
@@ -70,8 +69,6 @@ impl IssueStartEdit {
 
         Self::on_submit_message(value, &mut self.orig, stay_active)
     }
-
-
 }
 
 impl SingleEditUi<WorkStart> for IssueStartEdit {
@@ -82,32 +79,36 @@ impl SingleEditUi<WorkStart> for IssueStartEdit {
     fn set_orig(&mut self, orig: WorkStart) {
         let input = self.as_text(&orig);
         self.orig = Some(orig);
-        self.update_input(input);
+        self.update_default_input(input);
     }
 
     fn try_build(&self) -> Option<WorkStart> {
         self.builder.try_build()
     }
 
-    fn update_input(&mut self, input: String) -> Option<Message> {
-        self.input = input;
+    fn update_input(&mut self, _id: text_input::Id, input: String) -> Option<Message> {
+        self.input.text = input;
         let x = self.settings.load();
         self.builder.parse_input(
-            &**x,
+            &x,
             self.last_end,
-            &**self.recent_issues.borrow(),
-            &self.input,
+            &self.recent_issues.borrow(),
+            &self.input.text,
         );
 
         self.follow_up()
     }
 }
 
+impl FocusableUi for IssueStartEdit {
+    fn default_focus(&self) -> text_input::Id {
+        self.input.id.clone()
+    }
+}
+
 impl MainView for IssueStartEdit {
-    fn view(&mut self) -> QElement {
-        let input = TextInput::new(&mut self.input_state, "", &self.input, |i| {
-            Message::Is(IssueStartMessage::TextChanged(i))
-        });
+    fn view(&self) -> QElement {
+        let input = self.input.show("");
         let settings = self.settings.load();
 
         let info = Row::with_children(vec![
@@ -132,7 +133,7 @@ impl MainView for IssueStartEdit {
         Column::with_children(vec![
             self.top_bar.view(),
             v_space(style::SPACE),
-            input.into(),
+            input,
             v_space(style::SPACE),
             info.into(),
         ])
@@ -141,9 +142,7 @@ impl MainView for IssueStartEdit {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::Is(IssueStartMessage::TextChanged(input)) => {
-                self.update_input(input)
-            }
+            Message::Input(id, input) => self.update_input(id, input),
             Message::ClipboardValue(value) => {
                 self.builder.apply_clipboard(value);
                 None
@@ -200,7 +199,7 @@ impl IssueStartBuilder {
             r: issue,
             input: matching,
             rest,
-            is_recent: _
+            is_recent: _,
         } = parser.parse_task(input.trim_start());
 
         self.time = time;

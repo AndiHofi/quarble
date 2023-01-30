@@ -1,7 +1,7 @@
 use iced_core::{Background, Color, Font, Vector};
-use iced_native::widget::container::Style;
 use iced_native::widget::{button, container, text_input, Button};
-use iced_winit::Length;
+use iced_winit::{theme, Length};
+use std::borrow::Cow;
 
 pub const LABEL_WIDTH: Length = Length::Units(28);
 pub const TIME_WIDTH: Length = Length::Units(190);
@@ -45,14 +45,22 @@ pub const SELECTED_BACKGROUND: Background = Background::Color(MAIN_COLOR);
 pub struct ContentStyle;
 
 impl container::StyleSheet for ContentStyle {
-    fn style(&self) -> Style {
-        Style {
+    type Style = iced_native::Theme;
+
+    fn appearance(&self, style: &Self::Style) -> container::Appearance {
+        container::Appearance {
             border_color: Color::BLACK,
             border_radius: 2.0,
             border_width: 1.0,
-            ..Style::default()
+            ..container::Appearance::default()
         }
     }
+}
+
+pub fn container_style(
+    cs: impl container::StyleSheet<Style = iced_native::Theme> + 'static,
+) -> theme::Container {
+    theme::Container::Custom(Box::new(cs))
 }
 
 pub enum RowState {
@@ -66,17 +74,18 @@ pub struct ContentRow {
 }
 
 impl container::StyleSheet for ContentRow {
-    fn style(&self) -> Style {
-        let background = match self.state {
-            RowState::Even => DEFAULT_BACKGROUND,
-            RowState::Odd => ODD_BACKGROUND,
-            RowState::Selected => SELECTED_BACKGROUND,
-        };
-        let background = Some(background);
+    type Style = iced_native::Theme;
 
-        Style {
+    fn appearance(&self, _style: &Self::Style) -> container::Appearance {
+        let background = match self.state {
+            RowState::Even => Some(DEFAULT_BACKGROUND),
+            RowState::Odd => Some(ODD_BACKGROUND),
+            RowState::Selected => Some(SELECTED_BACKGROUND),
+        };
+
+        container::Appearance {
             background,
-            ..Style::default()
+            ..Default::default()
         }
     }
 }
@@ -84,8 +93,10 @@ impl container::StyleSheet for ContentRow {
 pub struct EditButton;
 
 impl button::StyleSheet for EditButton {
-    fn active(&self) -> button::Style {
-        button::Style {
+    type Style = iced_native::Theme;
+
+    fn active(&self, _style: &Self::Style) -> button::Appearance {
+        button::Appearance {
             shadow_offset: Vector::new(0.0, 0.0),
             background: Some(Background::Color(MAIN_COLOR)),
             border_radius: 0.0,
@@ -100,7 +111,7 @@ pub struct TextInput {
     pub error: bool,
 }
 
-const DEFAULT_TI_STYLE: text_input::Style = text_input::Style {
+const DEFAULT_TI_STYLE: text_input::Appearance = text_input::Appearance {
     background: Background::Color(Color::WHITE),
     border_radius: 5.0,
     border_width: 1.0,
@@ -108,43 +119,45 @@ const DEFAULT_TI_STYLE: text_input::Style = text_input::Style {
 };
 
 impl text_input::StyleSheet for TextInput {
-    fn active(&self) -> text_input::Style {
+    type Style = iced_native::Theme;
+
+    fn active(&self, style: &Self::Style) -> text_input::Appearance {
         if self.error {
-            text_input::Style {
+            text_input::Appearance {
                 border_color: ERROR_COLOR,
                 ..DEFAULT_TI_STYLE
             }
         } else {
-            text_input::Style {
+            text_input::Appearance {
                 border_color: Color::from_rgb(0.7, 0.7, 0.7),
                 ..DEFAULT_TI_STYLE
             }
         }
     }
 
-    fn focused(&self) -> text_input::Style {
+    fn focused(&self, style: &Self::Style) -> text_input::Appearance {
         if self.error {
-            text_input::Style {
+            text_input::Appearance {
                 border_color: ERROR_COLOR_FOCUSSED,
                 ..DEFAULT_TI_STYLE
             }
         } else {
-            text_input::Style {
+            text_input::Appearance {
                 border_color: Color::from_rgb(0.5, 0.5, 0.5),
                 ..DEFAULT_TI_STYLE
             }
         }
     }
 
-    fn placeholder_color(&self) -> Color {
-        Color::from_rgb(0.7, 0.7, 0.7)
-    }
-
-    fn value_color(&self) -> Color {
+    fn value_color(&self, style: &Self::Style) -> Color {
         Color::BLACK
     }
 
-    fn selection_color(&self) -> Color {
+    fn placeholder_color(&self, style: &Self::Style) -> Color {
+        Color::from_rgb(0.7, 0.7, 0.7)
+    }
+
+    fn selection_color(&self, style: &Self::Style) -> Color {
         Color::from_rgb(0.8, 0.8, 1.0)
     }
 }
@@ -152,8 +165,10 @@ impl text_input::StyleSheet for TextInput {
 pub struct ActiveTab;
 
 impl button::StyleSheet for ActiveTab {
-    fn active(&self) -> button::Style {
-        button::Style {
+    type Style = iced_native::Theme;
+
+    fn active(&self, _style: &Self::Style) -> button::Appearance {
+        button::Appearance {
             shadow_offset: Vector::new(0.0, 0.0),
             background: Some(Background::Color(HIGHLIGHT_COLOR)),
             border_radius: 0.0,
@@ -163,20 +178,22 @@ impl button::StyleSheet for ActiveTab {
         }
     }
 
-    fn hovered(&self) -> button::Style {
-        self.active()
+    fn hovered(&self, _style: &Self::Style) -> button::Appearance {
+        self.active(_style)
     }
 
-    fn pressed(&self) -> button::Style {
-        self.active()
+    fn pressed(&self, _style: &Self::Style) -> button::Appearance {
+        self.active(_style)
     }
 }
 
 pub struct Tab;
 
 impl button::StyleSheet for Tab {
-    fn active(&self) -> button::Style {
-        button::Style {
+    type Style = theme::Theme;
+
+    fn active(&self, _style: &Self::Style) -> button::Appearance {
+        button::Appearance {
             shadow_offset: Vector::new(0.0, 0.0),
             background: Some(Background::Color(MAIN_COLOR)),
             border_radius: 0.0,
@@ -196,14 +213,14 @@ pub fn button_font() -> Font {
     }
 }
 
-pub fn inline_button<'a>(
-    state: &'a mut button::State,
+pub fn inline_button(
     text: &str,
-) -> Button<'a, super::Message, <super::Quarble as iced_winit::Program>::Renderer> {
-    Button::new(
-        state,
-        iced_native::widget::Text::new(text).font(button_font()),
-    )
-    .style(EditButton)
-    .padding([2, 5])
+) -> Button<super::Message, <super::Quarble as iced_winit::Program>::Renderer> {
+    Button::new(iced_native::widget::Text::new(Cow::Borrowed(text)))
+        .style(button_style(EditButton))
+        .padding([2, 5])
+}
+
+pub fn button_style(bs: impl button::StyleSheet<Style = theme::Theme> + 'static) -> theme::Button {
+    theme::Button::Custom(Box::new(bs))
 }

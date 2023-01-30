@@ -2,7 +2,7 @@ use crate::conf::SettingsRef;
 use crate::ui::util::h_space;
 use crate::ui::{style, text, Message, QElement};
 use iced_core::Length;
-use iced_wgpu::Checkbox;
+use iced_native::widget::Checkbox;
 use iced_winit::widget::Row;
 
 #[derive(Debug)]

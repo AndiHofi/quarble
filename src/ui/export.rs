@@ -97,7 +97,7 @@ impl DayExportUi {
 }
 
 impl MainView for DayExportUi {
-    fn view(&mut self) -> QElement {
+    fn view(&self) -> QElement {
         let title_text = self
             .active_day
             .as_ref()
@@ -110,17 +110,17 @@ impl MainView for DayExportUi {
             text(self.msg.as_deref().unwrap_or("Export with <ctrl>+C")),
         ]);
 
-        let mut scroll = Scrollable::new(&mut self.scroll_state).width(Length::Fill);
+        let mut scroll = Vec::new();
         for e in self.actions.iter().map(super::current_day::action_row) {
-            scroll = scroll.push(e);
+            scroll.push(e);
         }
+        let scroll = Scrollable::new(Column::with_children(scroll).width(Length::Fill));
 
         let scroll = Container::new(scroll)
-            .style(style::ContentStyle)
             .width(Length::Fill)
             .height(Length::Fill);
         let buttons = Column::with_children(vec![
-            Button::new(&mut self.clip_button, text("Copy"))
+            Button::new(text("Copy"))
                 .on_press(Message::Export(DayExportMessage::TriggerExport))
                 .into(),
             v_space(style::DSPACE),

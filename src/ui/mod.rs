@@ -1,24 +1,27 @@
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use arc_swap::ArcSwap;
 use iced_core::alignment::Vertical;
-use iced_core::{Color, Padding};
 use iced_core::keyboard::Event;
-use iced_native::clipboard;
-use iced_wgpu::Text;
+use iced_core::{Color, Padding};
+use iced_native::widget::operation::focusable::{focus, focus_next, focus_previous};
+use iced_native::widget::Text;
+use iced_native::window::Mode;
+use iced_native::{clipboard, command, theme, widget, Renderer};
 use iced_winit::settings::SettingsWindowConfigurator;
 use iced_winit::widget::{Column, Container};
-use iced_winit::Program;
+use iced_winit::Element;
 use iced_winit::{Command, Subscription};
-use iced_winit::{Element, Mode};
+use iced_winit::{Program, Theme};
 
 use current_view::CurrentView;
 pub use message::Message;
 use stay_active::StayActive;
 pub use view_id::ViewId;
 
-use crate::conf::{SettingsRef, update_settings};
+use crate::conf::{update_settings, SettingsRef};
 use crate::data::{
     Action, ActiveDay, Day, RecentIssues, RecentIssuesData, RecentIssuesRef, TimedAction,
 };
@@ -43,11 +46,13 @@ mod current_view;
 mod export;
 pub mod fast_day_end;
 pub mod fast_day_start;
+mod focus_handler;
 mod issue_end_edit;
 mod issue_start_edit;
 mod keyboard_handler;
 pub mod main_action;
 mod message;
+mod my_text_input;
 mod recent_issues_view;
 mod settings_ui;
 mod single_edit_ui;
@@ -58,8 +63,6 @@ mod top_bar;
 mod util;
 mod view_id;
 mod window_configurator;
-mod focus_handler;
-mod my_text_input;
 
 pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     let config_settings = main_action.settings.clone();
@@ -76,10 +79,11 @@ pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
         default_text_size: 18,
         ..iced_wgpu::Settings::from_env()
     };
+
     iced_winit::application::run_with_window_configurator::<
         Quarble,
         iced_futures::backend::default::Executor,
-        iced_wgpu::window::Compositor,
+        iced_wgpu::window::Compositor<theme::Theme>,
         _,
     >(main_action, renderer_settings, window_configurator, true)
     .unwrap();
@@ -111,6 +115,9 @@ impl iced_winit::Program for Quarble {
                 Message::Exit => {
                     self.tab_bar.set_active_view(ViewId::CurrentDayUi);
                     self.current_view = CurrentView::Exit(Exit);
+                    return Command::single(command::Action::Window(
+                        iced_native::window::Action::Close,
+                    ));
                 }
                 Message::UpdateCloseOnSafe(new_value) => update_settings(&self.settings, |s| {
                     s.close_on_safe = new_value;
@@ -120,13 +127,14 @@ impl iced_winit::Program for Quarble {
                         message = ui.update(Message::Cd(CurrentDayMessage::StartDayChange))
                     } else {
                         self.tab_bar.set_active_view(ViewId::CurrentDayUi);
-                        self.current_view = CurrentView::create(
+                        let (view, msg) = CurrentView::create(
                             ViewId::CurrentDayUi,
                             self.settings.clone(),
                             self.recent_issues.clone(),
                             self.active_day.as_ref(),
                         );
-                        message = Some(Message::Cd(CurrentDayMessage::StartDayChange));
+                        self.current_view = view;
+                        message = msg;
                     }
                 }
                 Message::ChangeDayRelative(amount, forwarder) => {
@@ -151,23 +159,27 @@ impl iced_winit::Program for Quarble {
                     if self.current_view.view_id() != view_id {
                         self.tab_bar.set_active_view(view_id);
                         self.recent_view.refresh();
-                        self.current_view = CurrentView::create(
+                        let (view, msg) = CurrentView::create(
                             view_id,
                             self.settings.clone(),
                             self.recent_issues.clone(),
                             self.active_day.as_ref(),
                         );
+                        self.current_view = view;
+                        message = msg;
                     }
                 }
                 Message::RefreshView => {
                     self.tab_bar.set_active_view(self.current_view.view_id());
                     self.recent_view.refresh();
-                    self.current_view = CurrentView::create(
+                    let (view, msg) = CurrentView::create(
                         self.current_view.view_id(),
                         self.settings.clone(),
                         self.recent_issues.clone(),
                         self.active_day.as_ref(),
                     );
+                    self.current_view = view;
+                    message = msg;
                 }
                 Message::Reset => {
                     message = Some(Message::ChangeView(self.initial_view));
@@ -180,13 +192,15 @@ impl iced_winit::Program for Quarble {
                 }
                 Message::EditAction(EditAction(action)) => {
                     self.recent_view.refresh();
-                    self.current_view = CurrentView::create_for_edit(
+                    let (current_view, m) = CurrentView::create_for_edit(
                         *action,
                         self.settings.clone(),
                         self.recent_issues.clone(),
                         self.active_day.as_ref(),
                     );
+                    self.current_view = current_view;
                     self.tab_bar.set_active_view(self.current_view.view_id());
+                    message = m;
                 }
                 Message::DeleteAction(DeleteAction(_stay_active, action)) => {
                     if let Some(ref mut active_day) = self.active_day {
@@ -251,12 +265,13 @@ impl iced_winit::Program for Quarble {
                     }
                     ViewId::CurrentDayUi => {
                         self.tab_bar.set_active_view(ViewId::Export);
-                        self.current_view = CurrentView::create(
+                        let (view, _) = CurrentView::create(
                             ViewId::Export,
                             self.settings.clone(),
                             self.recent_issues.clone(),
                             self.active_day.as_ref(),
                         );
+                        self.current_view = view;
                         message = Some(Message::Export(DayExportMessage::TriggerExport));
                     }
                     _ => (),
@@ -273,13 +288,16 @@ impl iced_winit::Program for Quarble {
                     );
                     return Command::single(clipboard);
                 }
+                Message::Next => return Command::widget(focus_next()),
+                Message::Previous => return Command::widget(focus_previous()),
+                Message::ForceFocus(id) => return Command::widget(focus(id.into())),
                 m => message = self.current_view.update(m),
             }
         }
         Command::none()
     }
 
-    fn view(&mut self) -> Element<'_, Self::Message, Self::Renderer> {
+    fn view(&self) -> Element<'_, Self::Message, Self::Renderer> {
         let view_id = self.current_view.view_id();
         let content = self.current_view.view();
         let element = Container::new(content).padding(Padding::new(style::WINDOW_PADDING));
@@ -290,7 +308,7 @@ impl iced_winit::Program for Quarble {
             main = main.push(
                 Container::new(
                     Text::new(&self.current_error)
-                        .color(style::ERROR_COLOR)
+                        .style(style::ERROR_COLOR)
                         .size(20),
                 )
                 .padding([
@@ -321,7 +339,6 @@ impl iced_winit::Program for Quarble {
 
 impl iced_winit::Application for Quarble {
     type Flags = MainAction;
-
     fn new(flags: MainAction) -> (Self, Command<Message>) {
         let db = flags.db;
 
@@ -341,7 +358,7 @@ impl iced_winit::Application for Quarble {
             settings.clone(),
             recent_issues.clone(),
             active_day.as_ref(),
-        );
+        ).0;
 
         let recent_view = RecentIssuesView::create(recent_issues.clone());
 
@@ -370,12 +387,12 @@ impl iced_winit::Application for Quarble {
         "Quarble".to_string()
     }
 
-    fn subscription(&self) -> Subscription<Self::Message> {
-        iced_winit::subscription::events_with(keyboard_handler::global_keyboard_handler)
+    fn theme(&self) -> <Self::Renderer as Renderer>::Theme {
+        Theme::default()
     }
 
-    fn should_exit(&self) -> bool {
-        matches!(&self.current_view, CurrentView::Exit(_))
+    fn subscription(&self) -> Subscription<Self::Message> {
+        iced_winit::subscription::events_with(keyboard_handler::global_keyboard_handler)
     }
 }
 
@@ -399,15 +416,11 @@ fn store_active_day(
 }
 
 trait MainView {
-    fn view(&mut self) -> QElement;
+    fn view(&self) -> QElement;
 
     fn update(&mut self, msg: Message) -> Option<Message>;
 
-    fn handle_keyboard_event(
-        &self,
-        _: Event,
-        _: iced_winit::event::Status,
-    ) -> Option<Message> {
+    fn handle_keyboard_event(&self, _: Event, _: iced_winit::event::Status) -> Option<Message> {
         None
     }
 }
@@ -418,7 +431,7 @@ type QRenderer = iced_wgpu::Renderer;
 pub struct Exit;
 
 impl MainView for Exit {
-    fn view(&mut self) -> QElement {
+    fn view(&self) -> QElement {
         Text::new("exiting ...").into()
     }
 
@@ -497,8 +510,8 @@ fn unbooked_time_for_day(actions: &BTreeSet<Action>) -> Vec<TimeRange> {
     result
 }
 
-fn text<'a>(t: impl Into<String>) -> QElement<'a> {
-    Text::new(t).into()
+fn text<'a>(t: impl Into<Cow<'a, str>>) -> QElement<'a> {
+    Text::new(t.into()).into()
 }
 
 fn time_info<'a>(now: Time, v: ParseResult<Time, ()>) -> QElement<'a> {

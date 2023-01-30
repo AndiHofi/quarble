@@ -1,4 +1,5 @@
-use iced_wgpu::TextInput;
+use iced_native::widget::text_input::Id;
+use iced_native::widget::TextInput;
 use iced_winit::widget::{text_input, Column, Row, Text};
 
 use crate::conf::SettingsRef;
@@ -6,11 +7,11 @@ use crate::data::{Action, ActiveDay, DayEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_limit::{check_any_limit_overlaps, InvalidTime, TimeRange, TimeResult};
-use crate::ui::single_edit_ui::SingleEditUi;
+use crate::ui::my_text_input::MyTextInput;
+use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
 use crate::ui::top_bar::TopBar;
 use crate::ui::util::v_space;
 use crate::ui::{day_info_message, style, unbooked_time, MainView, Message, QElement};
-use crate::ui::stay_active::StayActive;
 
 #[derive(Clone, Debug)]
 pub enum FastDayEndMessage {
@@ -19,8 +20,7 @@ pub enum FastDayEndMessage {
 
 pub struct FastDayEnd {
     top_bar: TopBar,
-    text: String,
-    text_state: text_input::State,
+    text: MyTextInput,
     value: Option<DayEnd>,
     limits: Vec<TimeRange>,
     builder: DayEndBuilder,
@@ -40,8 +40,7 @@ impl FastDayEnd {
                 info: day_info_message(work_day),
                 settings: settings.clone(),
             },
-            text: String::new(),
-            text_state: text_input::State::focused(),
+            text: MyTextInput::new(String::new(), |_| true),
             value: Some(DayEnd {
                 ts: timeline.time_now(),
             }),
@@ -54,7 +53,6 @@ impl FastDayEnd {
             settings,
         })
     }
-
 }
 
 impl SingleEditUi<DayEnd> for FastDayEnd {
@@ -65,20 +63,20 @@ impl SingleEditUi<DayEnd> for FastDayEnd {
     fn set_orig(&mut self, orig: DayEnd) {
         let txt = self.as_text(&orig);
         self.original_entry = Some(orig);
-        self.update_input(txt);
+        self.update_default_input(txt);
     }
 
     fn try_build(&self) -> Option<DayEnd> {
         self.builder.try_build()
     }
 
-    fn update_input(&mut self, input: String) -> Option<Message> {
-        self.text = input;
+    fn update_input(&mut self, _id: text_input::Id, input: String) -> Option<Message> {
+        self.text.text = input;
 
         self.bad_input = false;
 
         let timeline = &self.settings.load().timeline;
-        let (mut result, rest) = Time::parse_with_offset(timeline, &self.text);
+        let (mut result, rest) = Time::parse_with_offset(timeline, &self.text.text);
         if !rest.trim_start().is_empty() {
             result = ParseResult::Invalid(());
         }
@@ -92,8 +90,14 @@ impl SingleEditUi<DayEnd> for FastDayEnd {
     }
 }
 
+impl FocusableUi for FastDayEnd {
+    fn default_focus(&self) -> Id {
+        self.text.id.clone()
+    }
+}
+
 impl MainView for FastDayEnd {
-    fn view(&mut self) -> QElement {
+    fn view(&self) -> QElement {
         let time_str = self
             .value
             .as_ref()
@@ -103,13 +107,7 @@ impl MainView for FastDayEnd {
         Column::with_children(vec![
             self.top_bar.view(),
             v_space(style::SPACE),
-            TextInput::new(
-                &mut self.text_state,
-                "now",
-                &self.text,
-                on_input_change_message,
-            )
-            .into(),
+            self.text.show("now"),
             v_space(style::SPACE),
             Row::with_children(vec![Text::new(time_str).into()]).into(),
         ])
@@ -118,9 +116,7 @@ impl MainView for FastDayEnd {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::Fde(FastDayEndMessage::TextChanged(new_value)) => {
-                self.update_input(new_value)
-            }
+            Message::Input(id, value) => self.update_input(id, value),
             Message::SubmitCurrent(stay_active) => {
                 Self::on_submit_message(self.try_build(), &mut self.original_entry, stay_active)
             }

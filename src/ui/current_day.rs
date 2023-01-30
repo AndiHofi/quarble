@@ -1,13 +1,15 @@
 use iced_core::alignment::Horizontal;
 use iced_core::Length;
-use iced_native::widget::{button, text_input};
-use iced_wgpu::TextInput;
+use iced_native::widget::{button, text_input, tree, TextInput};
+use iced_native::Widget;
+use iced_winit::theme;
 use iced_winit::widget::{scrollable, Column, Container, Row, Scrollable, Space, Text};
 
 use crate::conf::SettingsRef;
 use crate::data::{Action, ActiveDay, Day};
 use crate::parsing::time::Time;
 use crate::ui::message::{DeleteAction, EditAction};
+use crate::ui::my_text_input::MyTextInput;
 use crate::ui::stay_active::StayActive;
 use crate::ui::util::h_space;
 use crate::ui::{style, text};
@@ -22,13 +24,13 @@ pub enum CurrentDayMessage {
     RequestDelete(usize),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct CurrentDayUI {
     data: ActiveDay,
     scroll_state: scrollable::State,
     day_select_button: button::State,
-    edit_state: Option<text_input::State>,
-    day_value: String,
+    editing_current_day: bool,
+    day_value: MyTextInput,
     settings: SettingsRef,
     entries: Vec<Entry>,
     selected_entry: Option<usize>,
@@ -63,8 +65,8 @@ impl CurrentDayUI {
             data: active_day.cloned().unwrap_or_default(),
             scroll_state: Default::default(),
             day_select_button: button::State::new(),
-            edit_state: None,
-            day_value: String::new(),
+            editing_current_day: false,
+            day_value: MyTextInput::new("", |_| true),
             settings,
             entries,
             selected_entry: None,
@@ -73,7 +75,7 @@ impl CurrentDayUI {
 }
 
 impl MainView for CurrentDayUI {
-    fn view(&mut self) -> QElement {
+    fn view(&self) -> QElement {
         let day = self.data.get_day().to_string();
 
         let active_issue: Row<_, _> = if let Some(active_issue) = self.data.active_issue() {
@@ -90,21 +92,17 @@ impl MainView for CurrentDayUI {
 
         let entries: Vec<QElement> = self
             .entries
-            .iter_mut()
+            .iter()
             .enumerate()
             .map(|(index, e)| edit_action_row(e, index, self.selected_entry))
             .collect();
 
-        let mut entries_scroll = Scrollable::new(&mut self.scroll_state).width(Length::Fill);
-        for e in entries {
-            entries_scroll = entries_scroll.push(e);
-        }
-        let content_style: Box<dyn iced_winit::widget::container::StyleSheet> =
-            Box::new(style::ContentStyle);
+        let mut entries_scroll =
+            Scrollable::new(Column::with_children(entries).width(Length::Fill));
 
         let date_width = Length::Units(100);
         let mut day_row = Vec::new();
-        let (on_press, message) = if self.edit_state.is_some() {
+        let (on_press, message) = if self.editing_current_day {
             (Message::Cd(CurrentDayMessage::CommitDayChange), "Commit")
         } else {
             (
@@ -112,16 +110,13 @@ impl MainView for CurrentDayUI {
                 "Change day (d)",
             )
         };
-        if let Some(edit_state) = &mut self.edit_state {
+        if self.editing_current_day {
             let on_submit = Message::Cd(CurrentDayMessage::CommitDayChange);
-            day_row.push(
-                TextInput::new(edit_state, &day, &self.day_value, |v| {
-                    Message::Cd(CurrentDayMessage::DayTextChanged(v))
-                })
-                .on_submit(on_submit)
-                .width(date_width)
-                .into(),
-            )
+            let input = self
+                .day_value
+                .show_text_input(date_width)
+                .on_submit(on_submit);
+            day_row.push(input.into())
         } else {
             day_row.push(
                 Text::new(day)
@@ -131,11 +126,7 @@ impl MainView for CurrentDayUI {
             )
         };
         day_row.push(h_space(style::DSPACE));
-        day_row.push(
-            style::inline_button(&mut self.day_select_button, message)
-                .on_press(on_press)
-                .into(),
-        );
+        day_row.push(style::inline_button(message).on_press(on_press).into());
 
         Column::with_children(vec![
             Row::with_children(day_row).into(),
@@ -145,7 +136,7 @@ impl MainView for CurrentDayUI {
             Container::new(entries_scroll)
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .style(content_style)
+                .style(style::container_style(style::ContentStyle))
                 .padding([5, 1])
                 .into(),
         ])
@@ -154,23 +145,23 @@ impl MainView for CurrentDayUI {
 
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
-            Message::Cd(CurrentDayMessage::DayTextChanged(input)) => {
-                self.day_value = input;
+            Message::Input(id, input) if id == self.day_value.id => {
+                self.day_value.text = input;
                 None
             }
             Message::Cd(CurrentDayMessage::StartDayChange) => {
-                if self.edit_state.is_none() {
-                    self.edit_state = Some(text_input::State::focused());
-                }
-                None
+                self.editing_current_day = true;
+                Some(Message::ForceFocus(self.day_value.id.clone()))
             }
             Message::Cd(CurrentDayMessage::CommitDayChange) => {
-                if self.day_value.is_empty() {
-                    self.edit_state = None;
+                if self.day_value.text.is_empty() {
+                    self.editing_current_day = false;
                     None
                 } else {
-                    let parsed =
-                        Day::parse_day_relative(&self.settings.load().timeline, &self.day_value);
+                    let parsed = Day::parse_day_relative(
+                        &self.settings.load().timeline,
+                        &self.day_value.text,
+                    );
                     parsed.get().map(Message::ChangeDay)
                 }
             }
@@ -207,11 +198,11 @@ impl MainView for CurrentDayUI {
     }
 }
 
-fn edit_action_row(entry: &mut Entry, index: usize, selected_index: Option<usize>) -> QElement {
-    let delete_button = style::inline_button(&mut entry.delete_button, "D")
-        .on_press(Message::Cd(CurrentDayMessage::RequestDelete(entry.id)));
-    let edit_button = style::inline_button(&mut entry.edit_button, "E")
-        .on_press(Message::Cd(CurrentDayMessage::RequestEdit(entry.id)));
+fn edit_action_row(entry: &Entry, index: usize, selected_index: Option<usize>) -> QElement {
+    let delete_button =
+        style::inline_button("D").on_press(Message::Cd(CurrentDayMessage::RequestDelete(entry.id)));
+    let edit_button =
+        style::inline_button("E").on_press(Message::Cd(CurrentDayMessage::RequestEdit(entry.id)));
     let background = style::ContentRow {
         state: if Some(index) == selected_index {
             style::RowState::Selected
@@ -229,44 +220,42 @@ fn edit_action_row(entry: &mut Entry, index: usize, selected_index: Option<usize
         h_space(style::DSPACE),
         action_row(&entry.action),
     ]))
-    .style(background)
+    .style(theme::Container::Custom(Box::new(background)))
     .width(Length::Fill)
     .padding([2, 5])
     .into()
 }
 
-pub fn action_row(action: &Action) -> QElement {
+pub fn action_row<'a>(action: &'a Action) -> QElement<'a> {
     let w = Length::Units(50);
     let s = Length::Units(35);
     let time = |t: Time| {
         Text::new(t.to_string())
             .width(w)
             .horizontal_alignment(Horizontal::Right)
-            .into()
     };
-    let dash = |sep: &str| {
+    let dash = |sep: &'a str| {
         Text::new(sep)
             .width(s)
             .horizontal_alignment(Horizontal::Center)
-            .into()
     };
 
-    let mut row = Vec::new();
+    let mut row = Vec::<QElement>::new();
     match (action.start(), action.end()) {
         (Some(start), Some(end)) => {
-            row.push(time(start));
-            row.push(dash("-"));
-            row.push(time(end));
+            row.push(time(start).into());
+            row.push(dash("-").into());
+            row.push(time(end).into());
         }
         (Some(start), None) => {
-            row.push(time(start));
-            row.push(dash("-"));
+            row.push(time(start).into());
+            row.push(dash("-").into());
             row.push(h_space(w));
         }
         (None, Some(end)) => {
             row.push(h_space(w));
-            row.push(dash("-"));
-            row.push(time(end));
+            row.push(dash("-").into());
+            row.push(time(end).into());
         }
         (None, None) => row.push(
             Text::new("all day")
@@ -276,7 +265,7 @@ pub fn action_row(action: &Action) -> QElement {
         ),
     }
 
-    row.push(dash(" | "));
+    row.push(dash(" | ").into());
 
     if let Some(id) = action.issue_id() {
         row.push(
@@ -285,7 +274,7 @@ pub fn action_row(action: &Action) -> QElement {
                 .horizontal_alignment(Horizontal::Left)
                 .into(),
         );
-        row.push(dash(":"));
+        row.push(dash(":").into());
     } else {
         row.push(h_space(Length::Units(120)));
     }

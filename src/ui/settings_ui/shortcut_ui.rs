@@ -36,7 +36,7 @@ impl ShortCutUi {
         }
     }
 
-    pub fn show(&mut self) -> QElement {
+    pub fn show(&self) -> QElement {
         Row::with_children(vec![
             self.shortcut.show_text_input(Length::Units(30)).into(),
             h_space(style::SPACE),
