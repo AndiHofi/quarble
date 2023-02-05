@@ -1,5 +1,5 @@
 use iced_core::Length;
-use iced_native::widget::text_input::{Action, Id};
+use iced_native::widget::text_input::{Action};
 use iced_native::widget::{Row, Text};
 use iced_winit::widget::{text_input, Column};
 
@@ -167,7 +167,7 @@ impl SingleEditUi<WorkEntry> for BookSingleUI {
 }
 
 impl FocusableUi for BookSingleUI {
-    fn default_focus(&self) -> Id {
+    fn default_focus(&self) -> text_input::Id {
         self.start.id.clone()
     }
 }

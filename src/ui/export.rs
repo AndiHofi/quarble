@@ -1,4 +1,4 @@
-use crate::conf::SettingsRef;
+use crate::conf::{update_settings, SettingsRef};
 use crate::data::{Action, ActiveDay, NormalizedDay, Normalizer, TimeCockpitExporter};
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{style, text, MainView, Message, QElement};
@@ -12,6 +12,8 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub enum DayExportMessage {
     ChangeNormalize(bool),
+    ChangeAddBreak(bool),
+    ChangeAddLocation(bool),
     TriggerExport,
 }
 
@@ -24,14 +26,12 @@ pub struct DayExportUi {
     error: String,
     clip_button: button::State,
     settings: SettingsRef,
-    combine_bookings: bool,
     add_break: bool,
     scroll_state: scrollable::State,
 }
 
 impl DayExportUi {
     pub fn for_active_day(settings: SettingsRef, current_day: Option<&ActiveDay>) -> Box<Self> {
-        let combine_bookings = true;
         let add_break = true;
 
         let mut ui = Box::new(Self {
@@ -43,7 +43,6 @@ impl DayExportUi {
             error: String::new(),
             clip_button: button::State::new(),
             settings,
-            combine_bookings,
             add_break,
             scroll_state: scrollable::State::new(),
         });
@@ -60,7 +59,7 @@ impl DayExportUi {
                 resolution: NonZeroU32::new(s.resolution.num_minutes() as u32)
                     .unwrap_or_else(|| NonZeroU32::new(1).unwrap()),
                 breaks_config: s.breaks.clone(),
-                combine_bookings: self.combine_bookings,
+                combine_bookings: s.combine_bookings,
                 add_break: self.add_break,
             }
             .create_normalized(current_day);
@@ -98,6 +97,8 @@ impl DayExportUi {
 
 impl MainView for DayExportUi {
     fn view(&self) -> QElement {
+        let settings = self.settings.load();
+
         let title_text = self
             .active_day
             .as_ref()
@@ -110,22 +111,31 @@ impl MainView for DayExportUi {
             text(self.msg.as_deref().unwrap_or("Export with <ctrl>+C")),
         ]);
 
-        let mut scroll = Vec::new();
-        for e in self.actions.iter().map(super::current_day::action_row) {
-            scroll.push(e);
-        }
+        let scroll: Vec<_> = self.actions.iter().map(super::current_day::action_row).collect();
+
         let scroll = Scrollable::new(Column::with_children(scroll).width(Length::Fill));
 
         let scroll = Container::new(scroll)
             .width(Length::Fill)
-            .height(Length::Fill);
+            .height(Length::Fill)
+            .style(style::container_style(style::ContentStyle));
         let buttons = Column::with_children(vec![
             Button::new(text("Copy"))
                 .on_press(Message::Export(DayExportMessage::TriggerExport))
                 .into(),
             v_space(style::DSPACE),
-            Checkbox::new(self.combine_bookings, "Combine", |b| {
+            Checkbox::new(self.add_break, "Add break", |b| {
+                Message::Export(DayExportMessage::ChangeAddBreak(b))
+            })
+            .into(),
+            v_space(style::DSPACE),
+            Checkbox::new(settings.combine_bookings, "Combine", |b| {
                 Message::Export(DayExportMessage::ChangeNormalize(b))
+            })
+            .into(),
+            v_space(style::SPACE),
+            Checkbox::new(settings.add_location, "Location", |b| {
+                Message::Export(DayExportMessage::ChangeAddLocation(b))
             })
             .into(),
         ])
@@ -141,9 +151,21 @@ impl MainView for DayExportUi {
     fn update(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Export(DayExportMessage::ChangeNormalize(combine)) => {
-                self.combine_bookings = combine;
+                update_settings(&self.settings, |s| s.combine_bookings = combine);
                 self.normalize_day();
 
+                self.follow_up()
+            }
+            Message::Export(DayExportMessage::ChangeAddLocation(add_location)) => {
+                update_settings(&self.settings, |s| s.add_location = add_location);
+
+                self.normalize_day();
+                self.follow_up()
+            }
+            Message::Export(DayExportMessage::ChangeAddBreak(add_break)) => {
+                self.add_break = add_break;
+
+                self.normalize_day();
                 self.follow_up()
             }
             Message::Export(DayExportMessage::TriggerExport) => match self.export_text {

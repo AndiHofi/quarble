@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::iter::once;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -12,17 +13,17 @@ use regex::Regex;
 use crate::ui::my_text_input::MyTextInput;
 use shortcut_ui::ShortCutUi;
 
-use crate::conf::{BreaksConfig, SettingsRef};
+use crate::conf::{BreaksConfig, SettingsRef, update_settings};
 use crate::data::JiraIssue;
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_relative::TimeRelative;
 use crate::parsing::JiraIssueParser;
 use crate::ui::focus_handler::FocusHandler;
+use crate::ui::single_edit_ui::FocusableUi;
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{style, text, MainView, Message, QElement};
 use crate::{Settings, SettingsSer};
-use crate::ui::single_edit_ui::FocusableUi;
 
 mod shortcut_ui;
 
@@ -249,6 +250,7 @@ impl SettingsUI {
                 issue_shortcuts,
                 breaks,
                 max_recent_issues,
+                export: self.original.export.clone(),
             }),
             _ => None,
         }
@@ -318,28 +320,6 @@ impl FocusableUi for SettingsUI {
 
 type VResult<T> = Result<T, String>;
 
-impl<'a> FocusHandler<'a, Vec<&'a mut text_input::State>> for SettingsUI {
-    fn focus_order(&'a mut self) -> Vec<&'a mut State> {
-        // let mut result = vec![
-        //     &mut self.db_dir.input,
-        //     &mut self.resolution.input,
-        //     &mut self.max_recent_issues.input,
-        //     &mut self.min_breaks.input,
-        //     &mut self.min_work.input,
-        //     &mut self.default_break_start.input,
-        //     &mut self.default_break_end.input,
-        // ];
-        // for e in &mut self.shortcuts {
-        //     result.push(&mut e.shortcut.input);
-        //     result.push(&mut e.id.input);
-        //     result.push(&mut e.description.input);
-        //     result.push(&mut e.default_action.input);
-        // }
-        // result
-        vec![]
-    }
-}
-
 impl MainView for SettingsUI {
     fn view(&self) -> QElement {
         let breaks_dur = Row::with_children(vec![
@@ -358,15 +338,19 @@ impl MainView for SettingsUI {
                 .show_with_input_width("Default break end (hh:mm):", Length::Units(60)),
         ]);
 
-        let shortcuts: Vec<_> = self.shortcuts.iter().map(|sc| sc.show()).collect();
+        let shortcuts = self.shortcuts.iter().map(|sc| sc.show());
+        let shortcuts = shortcuts.collect();
 
-        let mut shortcuts = Scrollable::new(
+        let shortcuts = Scrollable::new(
             Column::with_children(shortcuts)
                 .width(Length::Fill)
-                .padding(style::WINDOW_PADDING),
+                .padding([0, 0]),
         );
 
-        let shortcuts = Container::new(shortcuts)
+        let shortcuts_content =
+            Column::with_children(vec![ShortCutUi::show_header(), shortcuts.into()]);
+
+        let shortcuts = Container::new(shortcuts_content)
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(style::WINDOW_PADDING)
@@ -435,19 +419,12 @@ impl MainView for SettingsUI {
                 *self = *SettingsUI::new(settings);
                 None
             }
-            Message::Next => {
-                let _ = self.validate();
-                self.focus_next()
-            }
-            Message::Previous => {
-                let _ = self.validate();
-                self.focus_previous()
-            }
             Message::SubmitCurrent(_) | Message::SettingsUi(SettingsUIMessage::SubmitSettings) => {
                 if let Some(x) = self.validate() {
                     self.settings_changed = true;
-                    let updated = self.settings.load_full().apply_ser(x);
-                    self.settings.store(Arc::new(updated));
+                    update_settings(&self.settings, |s| {
+                        *s = s.apply_ser(x);
+                    });
                 }
                 None
             }

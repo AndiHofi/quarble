@@ -108,7 +108,7 @@ fn main_inner() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn do_write_settings(settings: &Settings) -> anyhow::Result<()> {
+pub fn do_write_settings(settings: &Settings) -> anyhow::Result<()> {
     if settings.write_settings {
         let location = settings
             .settings_location

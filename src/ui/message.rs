@@ -18,7 +18,10 @@ use crate::ui::ViewId;
 pub enum Message {
     #[default]
     Update,
+    /// Safe settings and exit
     Exit,
+    /// Close the application without any other interaction
+    ForceExit,
     Next,
     Previous,
     ForceFocus(text_input::Id),

@@ -47,12 +47,27 @@ pub struct ContentStyle;
 impl container::StyleSheet for ContentStyle {
     type Style = iced_native::Theme;
 
-    fn appearance(&self, style: &Self::Style) -> container::Appearance {
+    fn appearance(&self, _style: &Self::Style) -> container::Appearance {
         container::Appearance {
             border_color: Color::BLACK,
             border_radius: 2.0,
             border_width: 1.0,
             ..container::Appearance::default()
+        }
+    }
+}
+
+pub struct TableHeaderStyle;
+impl container::StyleSheet for TableHeaderStyle {
+    type Style = iced_native::Theme;
+
+    fn appearance(&self, _style: &Self::Style) -> container::Appearance {
+        container::Appearance {
+            background: Some(SELECTED_BACKGROUND),
+            border_radius: 0.0,
+            border_width: 1.0,
+            border_color: MAIN_COLOR,
+            text_color: Some(TEXT_MAIN_COLOR),
         }
     }
 }
@@ -121,7 +136,7 @@ const DEFAULT_TI_STYLE: text_input::Appearance = text_input::Appearance {
 impl text_input::StyleSheet for TextInput {
     type Style = iced_native::Theme;
 
-    fn active(&self, style: &Self::Style) -> text_input::Appearance {
+    fn active(&self, _style: &Self::Style) -> text_input::Appearance {
         if self.error {
             text_input::Appearance {
                 border_color: ERROR_COLOR,
@@ -135,7 +150,7 @@ impl text_input::StyleSheet for TextInput {
         }
     }
 
-    fn focused(&self, style: &Self::Style) -> text_input::Appearance {
+    fn focused(&self, _style: &Self::Style) -> text_input::Appearance {
         if self.error {
             text_input::Appearance {
                 border_color: ERROR_COLOR_FOCUSSED,
@@ -149,15 +164,15 @@ impl text_input::StyleSheet for TextInput {
         }
     }
 
-    fn value_color(&self, style: &Self::Style) -> Color {
-        Color::BLACK
-    }
-
-    fn placeholder_color(&self, style: &Self::Style) -> Color {
+    fn placeholder_color(&self, _style: &Self::Style) -> Color {
         Color::from_rgb(0.7, 0.7, 0.7)
     }
 
-    fn selection_color(&self, style: &Self::Style) -> Color {
+    fn value_color(&self, _style: &Self::Style) -> Color {
+        Color::BLACK
+    }
+
+    fn selection_color(&self, _style: &Self::Style) -> Color {
         Color::from_rgb(0.8, 0.8, 1.0)
     }
 }

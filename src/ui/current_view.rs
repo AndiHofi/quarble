@@ -9,9 +9,10 @@ use crate::ui::issue_end_edit::IssueEndEdit;
 use crate::ui::issue_start_edit::IssueStartEdit;
 use crate::ui::settings_ui::SettingsUI;
 use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
-use crate::ui::{Exit, MainView, Message, QElement, ViewId};
+use crate::ui::{MainView, Message, QElement, ViewId};
 use iced_native::Command;
 use std::ops::Deref;
+use crate::ui::exit::Exit;
 
 pub enum CurrentView {
     Fds(Box<FastDayStart>),
@@ -56,25 +57,17 @@ impl CurrentView {
                 let ui = FastDayEnd::for_work_day(settings, active_day);
                 let m = do_focus(&ui);
                 (CurrentView::Fde(ui), m)
-            },
+            }
             ViewId::BookSingle => {
-                let ui = BookSingleUI::for_active_day(
-                    settings,
-                    recent_issues,
-                    active_day,
-                );
+                let ui = BookSingleUI::for_active_day(settings, recent_issues, active_day);
                 let m = do_focus(&ui);
                 (CurrentView::Bs(ui), m)
-            },
+            }
             ViewId::BookIssueStart => {
-                let ui = IssueStartEdit::for_active_day(
-                    settings,
-                    recent_issues,
-                    active_day,
-                );
+                let ui = IssueStartEdit::for_active_day(settings, recent_issues, active_day);
                 let m = do_focus(&ui);
                 (CurrentView::Is(ui), m)
-            },
+            }
             ViewId::BookIssueEnd => {
                 let ui = IssueEndEdit::for_active_day(settings, active_day);
                 let m = do_focus(&ui);
@@ -84,15 +77,16 @@ impl CurrentView {
                 let ui = CurrentDayUI::for_active_day(settings, active_day);
                 (CurrentView::CdUi(ui), None)
             }
-            ViewId::Export => {
-                (CurrentView::Export(DayExportUi::for_active_day(settings, active_day)), None)
-            }
+            ViewId::Export => (
+                CurrentView::Export(DayExportUi::for_active_day(settings, active_day)),
+                None,
+            ),
             ViewId::Settings => {
                 let ui = SettingsUI::new(settings);
                 let m = do_focus(&ui);
                 (CurrentView::Settings(ui), m)
-            },
-            ViewId::Exit => (CurrentView::Exit(Exit), Some(Message::Exit)),
+            }
+            ViewId::Exit => (CurrentView::Exit(Exit), Some(Message::Update)),
         }
     }
 
@@ -139,9 +133,7 @@ impl CurrentView {
                 let m = do_focus(&ui);
                 (CurrentView::Fde(ui), m)
             }
-            _ => {
-                CurrentView::create(ViewId::CurrentDayUi, settings, recent_issues, active_day)
-            }
+            _ => CurrentView::create(ViewId::CurrentDayUi, settings, recent_issues, active_day),
         }
     }
 }

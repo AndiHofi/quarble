@@ -28,19 +28,14 @@ pub struct Settings {
     pub debug: bool,
     pub close_on_safe: bool,
     pub max_recent_issues: usize,
+    pub add_location: bool,
+    pub combine_bookings: bool,
 }
 
 impl Settings {
     pub fn from_ser(ser: Option<SettingsSer>) -> Self {
         if let Some(s) = ser {
-            Self {
-                db_dir: s.db_dir.clone(),
-                resolution: chrono::Duration::minutes(s.resolution_minutes as i64),
-                issue_parser: JiraIssueParser::new(s.issue_shortcuts),
-                breaks: s.breaks,
-                max_recent_issues: s.max_recent_issues as usize,
-                ..Self::default()
-            }
+            Self::default().apply_ser(s)
         } else {
             Self::default()
         }
@@ -59,6 +54,8 @@ impl Settings {
             debug: self.debug,
             close_on_safe: self.close_on_safe,
             max_recent_issues: ser.max_recent_issues as usize,
+            add_location: ser.export.add_location,
+            combine_bookings: ser.export.combine_bookings,
         }
     }
 
@@ -77,7 +74,10 @@ pub fn into_settings_ref(s: Settings) -> SettingsRef {
 ///
 /// Is not thread-safe and does protect against lost updates
 pub fn update_settings(settings: &SettingsRef, f: impl FnOnce(&mut Settings)) {
-    update_arcswap(settings, f)
+    update_arcswap(settings, |s| {
+        f(s);
+        s.write_settings = true;
+    })
 }
 
 impl Default for Settings {
@@ -95,6 +95,8 @@ impl Default for Settings {
             debug: false,
             close_on_safe: true,
             max_recent_issues: 10,
+            add_location: false,
+            combine_bookings: true,
         }
     }
 }
@@ -110,6 +112,12 @@ pub struct SettingsSer {
     pub breaks: BreaksConfig,
     #[serde(default = "default_max_recent_issues")]
     pub max_recent_issues: u32,
+    #[serde(default)]
+    pub export: ExportConfig,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_max_recent_issues() -> u32 {
@@ -124,6 +132,10 @@ impl SettingsSer {
             issue_shortcuts: settings.issue_parser.shortcuts().clone(),
             breaks: settings.breaks.clone(),
             max_recent_issues: settings.max_recent_issues as u32,
+            export: ExportConfig {
+                add_location: settings.add_location,
+                combine_bookings: settings.combine_bookings,
+            },
         }
     }
 }
@@ -135,12 +147,28 @@ pub struct BreaksConfig {
     pub default_break: (Time, Time),
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct ExportConfig {
+    pub add_location: bool,
+    pub combine_bookings: bool,
+}
+
+impl Default for ExportConfig {
+    fn default() -> Self {
+        ExportConfig {
+            add_location: false,
+            combine_bookings: true,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::collections::BTreeMap;
     use std::path::Path;
 
     use crate::conf::{BreaksConfig, SettingsSer};
+    use crate::conf::settings::ExportConfig;
     use crate::data::JiraIssue;
     use crate::parsing::time::Time;
 
@@ -184,6 +212,10 @@ mod test {
                 default_break: (Time::hm(11, 30), Time::hm(12, 15)),
             },
             max_recent_issues: 15,
+            export: ExportConfig {
+                add_location: true,
+                combine_bookings: false,
+            },
         };
 
         let pretty = serde_json::to_string_pretty(&orig).unwrap();

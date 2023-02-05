@@ -9,19 +9,20 @@ use iced_core::{Color, Padding};
 use iced_native::widget::operation::focusable::{focus, focus_next, focus_previous};
 use iced_native::widget::Text;
 use iced_native::window::Mode;
-use iced_native::{clipboard, command, theme, widget, Renderer};
+use iced_native::{clipboard, command, Renderer, theme};
 use iced_winit::settings::SettingsWindowConfigurator;
 use iced_winit::widget::{Column, Container};
 use iced_winit::Element;
 use iced_winit::{Command, Subscription};
-use iced_winit::{Program, Theme};
+use iced_winit::Program;
 
 use current_view::CurrentView;
+use exit::Exit;
 pub use message::Message;
 use stay_active::StayActive;
 pub use view_id::ViewId;
 
-use crate::conf::{update_settings, SettingsRef};
+use crate::conf::{SettingsRef, update_settings};
 use crate::data::{
     Action, ActiveDay, Day, RecentIssues, RecentIssuesData, RecentIssuesRef, TimedAction,
 };
@@ -63,6 +64,8 @@ mod top_bar;
 mod util;
 mod view_id;
 mod window_configurator;
+mod exit;
+
 
 pub fn show_ui(main_action: MainAction) -> Rc<ArcSwap<Settings>> {
     let config_settings = main_action.settings.clone();
@@ -113,8 +116,11 @@ impl iced_winit::Program for Quarble {
             match current {
                 Message::Error(msg) => self.current_error = msg,
                 Message::Exit => {
-                    self.tab_bar.set_active_view(ViewId::CurrentDayUi);
+                    self.tab_bar.set_active_view(ViewId::Exit);
                     self.current_view = CurrentView::Exit(Exit);
+                    message = Some(Message::Update);
+                }
+                Message::ForceExit => {
                     return Command::single(command::Action::Window(
                         iced_native::window::Action::Close,
                     ));
@@ -388,7 +394,7 @@ impl iced_winit::Application for Quarble {
     }
 
     fn theme(&self) -> <Self::Renderer as Renderer>::Theme {
-        Theme::default()
+        theme::Theme::default()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
@@ -427,18 +433,6 @@ trait MainView {
 
 type QElement<'a> = Element<'a, Message, <Quarble as iced_winit::Program>::Renderer>;
 type QRenderer = iced_wgpu::Renderer;
-
-pub struct Exit;
-
-impl MainView for Exit {
-    fn view(&self) -> QElement {
-        Text::new("exiting ...").into()
-    }
-
-    fn update(&mut self, _msg: Message) -> Option<Message> {
-        None
-    }
-}
 
 fn day_info_message(d: Option<&ActiveDay>) -> String {
     if let Some(d) = d {
