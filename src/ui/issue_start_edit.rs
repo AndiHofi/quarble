@@ -1,16 +1,18 @@
+use iced_core::Length;
 use iced_native::widget::{text_input, Column, Row};
 
 use crate::conf::SettingsRef;
 use crate::data::{ActiveDay, JiraIssue, RecentIssues, RecentIssuesRef, WorkStart};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
-use crate::parsing::{parse_issue_clipboard, IssueParsed, IssueParser, IssueParserWithRecent};
+use crate::parsing::{parse_issue_clipboard, IssueParser, IssueParserWithRecent};
+use crate::ui::book_single::nparsing::WTime;
 use crate::ui::clip_read::ClipRead;
 use crate::ui::my_text_input::MyTextInput;
 use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
 use crate::ui::stay_active::StayActive;
 use crate::ui::top_bar::TopBar;
-use crate::ui::util::{h_space, v_space};
+use crate::ui::util::{consume_input, h_space, v_space};
 use crate::ui::{day_info_message, style, text, time_info, MainView, Message, QElement};
 use crate::Settings;
 
@@ -21,7 +23,10 @@ pub enum IssueStartMessage {
 
 pub struct IssueStartEdit {
     top_bar: TopBar,
-    input: MyTextInput,
+    start: MyTextInput,
+    id: MyTextInput,
+    comment: MyTextInput,
+    description: MyTextInput,
     builder: IssueStartBuilder,
     settings: SettingsRef,
     orig: Option<WorkStart>,
@@ -46,7 +51,10 @@ impl IssueStartEdit {
                 info: day_info_message(active_day),
                 settings: settings.clone(),
             },
-            input: MyTextInput::new("", |_| true),
+            start: MyTextInput::new("", |_| true).with_placeholder("start"),
+            id: MyTextInput::new("", |_| true).with_placeholder("key"),
+            comment: MyTextInput::new("", |_| true).with_placeholder("comment"),
+            description: MyTextInput::new("", |_| true).with_placeholder("description"),
             builder: IssueStartBuilder::default(),
             settings,
             orig: None,
@@ -86,29 +94,39 @@ impl SingleEditUi<WorkStart> for IssueStartEdit {
         self.builder.try_build()
     }
 
-    fn update_input(&mut self, _id: text_input::Id, input: String) -> Option<Message> {
-        self.input.text = input;
-        let x = self.settings.load();
-        self.builder.parse_input(
-            &x,
-            self.last_end,
-            &self.recent_issues.borrow(),
-            &self.input.text,
+    fn update_input(&mut self, id: text_input::Id, input: String) -> Option<Message> {
+        consume_input(
+            id,
+            input,
+            &mut [
+                &mut self.start,
+                &mut self.id,
+                &mut self.comment,
+                &mut self.description,
+            ],
         );
-
+        let settings = self.settings.load();
+        let recent_issues = self.recent_issues.borrow();
+        self.builder.parse_input(&settings, self.last_end, &recent_issues, &self.start.text, &self.id.text, &self.comment.text, &self.description.text);
         self.follow_up()
     }
 }
 
 impl FocusableUi for IssueStartEdit {
     fn default_focus(&self) -> text_input::Id {
-        self.input.id.clone()
+        self.start.id.clone()
     }
 }
 
 impl MainView for IssueStartEdit {
     fn view(&self) -> QElement {
-        let input = self.input.show("");
+        let input_row: Vec<QElement> = vec![
+            self.start.show_text_input(Length::Units(100)).into(),
+            self.id.show_text_input(Length::Units(300)).into(),
+            self.comment.show_text_input(Length::Fill).into(),
+            self.description.show_text_input(Length::Units(200)).into(),
+        ];
+        let input_row = Row::with_children(input_row).spacing(style::SPACE_PX);
         let settings = self.settings.load();
 
         let info = Row::with_children(vec![
@@ -133,7 +151,7 @@ impl MainView for IssueStartEdit {
         Column::with_children(vec![
             self.top_bar.view(),
             v_space(style::SPACE),
-            input,
+            input_row.into(),
             v_space(style::SPACE),
             info.into(),
         ])
@@ -156,21 +174,22 @@ impl MainView for IssueStartEdit {
 
 #[derive(Debug, Default)]
 struct IssueStartBuilder {
-    time: ParseResult<Time, ()>,
+    time: ParseResult<WTime, ()>,
     issue: ParseResult<JiraIssue, ()>,
     clipboard: ClipRead,
-    issue_input: String,
     comment: Option<String>,
 }
 
 impl IssueStartBuilder {
     fn try_build(&self) -> Option<WorkStart> {
         match (&self.time, &self.issue, &self.comment) {
-            (ParseResult::Valid(time), ParseResult::Valid(i), Some(c)) => Some(WorkStart {
-                ts: *time,
-                task: i.clone(),
-                description: c.to_string(),
-            }),
+            (ParseResult::Valid(WTime::Time(time)), ParseResult::Valid(i), Some(c)) => {
+                Some(WorkStart {
+                    ts: *time,
+                    task: i.clone(),
+                    description: c.to_string(),
+                })
+            }
             _ => None,
         }
     }
@@ -180,49 +199,31 @@ impl IssueStartBuilder {
         settings: &Settings,
         last_end: Option<Time>,
         recent_issues: &RecentIssues,
-        input: &str,
+        start: &str,
+        key: &str,
+        comment: &str,
+        description: &str,
     ) {
-        let (time, input) = if let Some(rest) = input.strip_prefix('l') {
-            (
-                last_end
-                    .map(ParseResult::Valid)
-                    .unwrap_or(ParseResult::Invalid(())),
-                rest,
-            )
-        } else {
-            Time::parse_with_offset(&settings.timeline, input)
-        };
+        let start = super::book_single::nparsing::parse_start(start, &settings.timeline);
 
         let parser = IssueParserWithRecent::new(&settings.issue_parser, recent_issues);
+        let issue = parser.parse_issue_key(key.trim());
 
-        let IssueParsed {
-            r: issue,
-            input: matching,
-            rest,
-            is_recent: _,
-        } = parser.parse_task(input.trim_start());
+        self.time = start;
 
-        self.time = time;
-
-        let rest = rest.trim();
-        self.comment = if rest.is_empty() {
+        self.comment = if comment.is_empty() {
             issue.get_ref().and_then(|e| e.default_action.clone())
         } else {
-            Some(rest.to_string())
+            Some(comment.to_string())
         };
 
         let old_issue = std::mem::take(&mut self.issue);
         if matches!(issue, ParseResult::None) {
-            if self.issue_input.as_str() != matching {
-                self.clipboard = ClipRead::DoRead;
-                self.issue = ParseResult::None;
-            } else {
-                self.issue = old_issue;
-            }
+            self.issue = old_issue;
         } else {
             self.issue = issue;
         }
-        self.issue_input = matching.to_string();
+        dbg!(self);
     }
 
     fn apply_clipboard(&mut self, value: Option<String>) {

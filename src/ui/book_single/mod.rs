@@ -17,7 +17,7 @@ use crate::ui::top_bar::TopBar;
 use crate::ui::util::{h_space, v_space};
 use crate::ui::{day_info_message, style, text, MainView, Message, QElement};
 
-mod nparsing;
+pub mod nparsing;
 mod parsing;
 
 #[derive(Clone, Debug)]

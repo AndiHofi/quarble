@@ -1,7 +1,9 @@
 use iced_core::Length;
 use std::str::FromStr;
+use iced_native::widget::text_input;
 
 use crate::ui::{Message, QElement};
+use crate::ui::my_text_input::MyTextInput;
 
 pub(super) fn valid_start_time(id: usize, min_val: u32, input: String) -> Message {
     match valid_base_time(&input) {
@@ -72,3 +74,15 @@ pub(in crate::ui) fn v_space<'a>(l: Length) -> QElement<'a> {
 pub(in crate::ui) fn h_space<'a>(l: Length) -> QElement<'a> {
     iced_winit::widget::Space::with_width(l).into()
 }
+
+pub(super) fn consume_input(
+    id: text_input::Id,
+    input: String,
+    fields: &mut [&mut MyTextInput],
+) -> Option<Message> {
+    fields
+        .iter_mut()
+        .find(|e| e.id == id)
+        .and_then(|f| f.accept_input(input))
+}
+

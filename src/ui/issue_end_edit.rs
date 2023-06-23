@@ -1,3 +1,4 @@
+use futures::StreamExt;
 use iced_native::widget::text_input::Id;
 use iced_native::widget::{text_input, Column, Row};
 
@@ -6,6 +7,7 @@ use crate::data::{ActiveDay, JiraIssue, WorkEnd};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::{IssueParsed, IssueParser};
+use crate::ui::book_single::nparsing::WTime;
 use crate::ui::my_text_input::MyTextInput;
 use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
 use crate::ui::top_bar::TopBar;
@@ -19,8 +21,11 @@ pub enum IssueEndMessage {
 
 pub struct IssueEndEdit {
     top_bar: TopBar,
-    input: MyTextInput,
-    time: ParseResult<Time, ()>,
+    end_time: MyTextInput,
+    issue_id: MyTextInput,
+    message: MyTextInput,
+    description: MyTextInput,
+    time: ParseResult<WTime, ()>,
     issue: ParseResult<JiraIssue, ()>,
     settings: SettingsRef,
     default_issue: Option<JiraIssue>,
@@ -35,6 +40,11 @@ impl IssueEndEdit {
         let guard = settings.load();
         let default_issue = active_day.and_then(|d| d.current_issue(guard.timeline.time_now()));
 
+        let issue_id_text = default_issue.map(|e| e.ident.as_str()).unwrap_or("issue");
+        let description_text = default_issue
+            .and_then(|e| e.description.as_ref())
+            .map(|e| e.as_str())
+            .unwrap_or("description");
         Box::new(Self {
             top_bar: TopBar {
                 title: "End issue:",
@@ -42,8 +52,12 @@ impl IssueEndEdit {
                 info: day_info_message(active_day),
                 settings: settings.clone(),
             },
-            input: MyTextInput::new("", |_| true),
-            time: ParseResult::Valid(guard.timeline.time_now()),
+            end_time: MyTextInput::new("now", |_| true).with_placeholder("end time"),
+            issue_id: MyTextInput::new(issue_id_text, |_| true).with_placeholder("issue id"),
+            message: MyTextInput::new("description", |_| true).with_placeholder("description"),
+            description: MyTextInput::new(                description_text,                |_| true,            )
+            .with_placeholder("description"),
+            time: ParseResult::Valid(WTime::Time(guard.timeline.time_now())),
             settings,
             issue: ParseResult::None,
             default_issue,
@@ -71,7 +85,7 @@ impl SingleEditUi<WorkEnd> for IssueEndEdit {
         };
 
         match (issue, self.time.as_ref()) {
-            (Some(task), ParseResult::Valid(time)) => {
+            (Some(task), ParseResult::Valid(WTime::Time(time))) => {
                 let action = WorkEnd { task, ts: *time };
                 Some(action)
             }
@@ -79,25 +93,28 @@ impl SingleEditUi<WorkEnd> for IssueEndEdit {
         }
     }
 
-    fn update_input(&mut self, _id: text_input::Id, input: String) -> Option<Message> {
-        self.input.text = input;
-        let guard = self.settings.load();
-        let (time, input) = Time::parse_with_offset(&guard.timeline, &self.input.text);
-        self.time = time;
-        let IssueParsed { r, rest, .. } = guard.issue_parser.parse_task(input.trim_start());
-        if rest.is_empty() {
-            self.issue = r;
-        } else {
-            self.issue = ParseResult::Invalid(());
-        }
-
+    fn update_input(&mut self, id: text_input::Id, input: String) -> Option<Message> {
+        consume_input(
+            id,
+            input,
+            &mut [
+                &mut self.end_time,
+                &mut self.issue_id,
+                &mut self.message,
+                &mut self.description,
+            ],
+        );
+        let settings = self.settings.load();
+        // let recent_issues = self.recent_issues.borrow();
+        // self.builder.parse_input(&settings, self.last_end, &recent_issues, &self.start.text, &self.id.text, &self.comment.text, &self.description.text);
+        // self.follow_up
         None
     }
 }
 
 impl FocusableUi for IssueEndEdit {
     fn default_focus(&self) -> Id {
-        self.input.id.clone()
+        self.end_time.id.clone()
     }
 }
 
@@ -146,6 +163,18 @@ impl MainView for IssueEndEdit {
         }
     }
 }
+
+pub(super) fn consume_input(
+    id: text_input::Id,
+    input: String,
+    fields: &mut [&mut MyTextInput],
+) -> Option<Message> {
+    fields
+        .iter_mut()
+        .find(|e| e.id == id)
+        .and_then(|f| f.accept_input(input))
+}
+
 
 #[cfg(test)]
 mod test {

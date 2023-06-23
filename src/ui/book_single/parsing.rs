@@ -106,6 +106,41 @@ impl WorkBuilder {
     }
 }
 
+pub(crate) enum TorD {
+    Time(Time),
+    Dur(TimeRelative),
+    Last,
+}
+
+pub(crate) fn parse_time<'a, 'b>(
+    timeline: &'b Timeline,
+    input: &'a str,
+) -> (ParseResult<TorD, ()>, &'a str) {
+    let t1 = if let Some(c) = FROM_LAST.captures(input) {
+        (ParseResult::Valid(TorD::Last), &input[c.len()..])
+    } else {
+        match Time::parse_with_offset(timeline, input) {
+            (ParseResult::None | ParseResult::Incomplete, _) => {
+                let (tr, rest) = TimeRelative::parse_relative(input);
+                (
+                    tr.and_then(|r| timeline.time_now().try_add_relative(r).into())
+                        .map(TorD::Time),
+                    rest,
+                )
+            }
+            (absolute, rest) => (absolute.map(TorD::Time), rest),
+        }
+    };
+
+    match t1 {
+        (ParseResult::None | ParseResult::Incomplete, _) => {
+            let (rel, rest) = TimeRelative::parse_duration(input);
+            (rel.map(TorD::Dur), rest)
+        }
+        time => time,
+    }
+}
+
 fn parse(
     b: &mut WorkBuilder,
     settings: &Settings,
@@ -113,40 +148,6 @@ fn parse(
     last_end: Option<Time>,
     input: &str,
 ) {
-    enum TorD {
-        Time(Time),
-        Dur(TimeRelative),
-        Last,
-    }
-
-    fn parse_time<'a, 'b>(
-        timeline: &'b Timeline,
-        input: &'a str,
-    ) -> (ParseResult<TorD, ()>, &'a str) {
-        let t1 = if let Some(c) = FROM_LAST.captures(input) {
-            (ParseResult::Valid(TorD::Last), &input[c.len()..])
-        } else {
-            match Time::parse_with_offset(timeline, input) {
-                (ParseResult::None | ParseResult::Incomplete, _) => {
-                    let (tr, rest) = TimeRelative::parse_relative(input);
-                    (
-                        tr.and_then(|r| timeline.time_now().try_add_relative(r).into())
-                            .map(TorD::Time),
-                        rest,
-                    )
-                }
-                (absolute, rest) => (absolute.map(TorD::Time), rest),
-            }
-        };
-
-        match t1 {
-            (ParseResult::None | ParseResult::Incomplete, _) => {
-                let (rel, rest) = TimeRelative::parse_duration(input);
-                (rel.map(TorD::Dur), rest)
-            }
-            time => time,
-        }
-    }
 
     let timeline = &settings.timeline;
     let input = input.trim_start();

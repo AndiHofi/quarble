@@ -39,6 +39,7 @@ use crate::ui::tab_bar::TabBar;
 use crate::ui::util::v_space;
 use crate::ui::window_configurator::{DisplaySelection, MyWindowConfigurator};
 use crate::Settings;
+use crate::ui::book_single::nparsing::WTime;
 
 mod book_single;
 mod clip_read;
@@ -508,9 +509,9 @@ fn text<'a>(t: impl Into<Cow<'a, str>>) -> QElement<'a> {
     Text::new(t.into()).into()
 }
 
-fn time_info<'a>(now: Time, v: ParseResult<Time, ()>) -> QElement<'a> {
+fn time_info<'a>(now: Time, v: ParseResult<WTime, ()>) -> QElement<'a> {
     Text::new(
-        v.get_with_default(now)
+        v.get_with_default(WTime::Time(now))
             .map(|e| e.to_string())
             .unwrap_or_else(|| "invalid".to_string()),
     )

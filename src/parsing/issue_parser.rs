@@ -20,6 +20,8 @@ lazy_static! {
 
 pub trait IssueParser {
     fn parse_task<'a>(&self, input: &'a str) -> IssueParsed<'a>;
+
+    fn parse_issue_key(&self, input: &str) -> ParseResult<JiraIssue, ()>;
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -111,6 +113,36 @@ impl IssueParser for JiraIssueParser {
             }
         }
     }
+
+    fn parse_issue_key(&self, input: &str) -> ParseResult<JiraIssue, ()> {
+        if let Some(c) = ISSUE.captures(input) {
+            let id = c.name("id").unwrap().as_str();
+            ok_if_empty( id, rest(c, input)).map(|e| JiraIssue::create(e).unwrap())
+        } else if let Some(c) = ISSUE_SHORTCUT.captures(input) {
+            let abbr = c.name("abbr").unwrap().as_str();
+            let ch: char = abbr.chars().next().unwrap();
+            if !rest(c, input).trim().is_empty() {
+                return ParseResult::Invalid(());
+            }
+            if ch == 'c' {
+                ParseResult::None
+            } else if let Some(i) = self.shortcuts.get(&ch) {
+                ParseResult::Valid(i.clone())
+            } else {
+                ParseResult::Invalid(())
+            }
+        } else {
+            ParseResult::None
+        }
+    }
+}
+
+fn ok_if_empty<T>(value: T, rest: &str) -> ParseResult<T, ()> {
+    if rest.trim().is_empty() {
+        ParseResult::Valid(value)
+    } else {
+        ParseResult::Invalid(())
+    }
 }
 
 pub struct IssueParserWithRecent<'a> {
@@ -137,6 +169,25 @@ impl<'a> IssueParser for IssueParserWithRecent<'a> {
             }
         } else {
             self.delegate.parse_task(input)
+        }
+    }
+
+    fn parse_issue_key(&self, input: &str) -> ParseResult<JiraIssue, ()> {
+        if let Some(c) = RECENT_ISSUE.captures(input) {
+            let index = usize::from_str(c.name("recent").unwrap().as_str()).unwrap();
+            let recent = self.recent.find_recent(index - 1).map(|r| r.issue.clone());
+            let rest = rest(c, input);
+            if rest.trim().is_empty() {
+                if let Some(recent) = recent {
+                    ParseResult::Valid(recent)
+                } else {
+                    ParseResult::Invalid(())
+                }
+            } else {
+                ParseResult::Invalid(())
+            }
+        } else {
+            self.delegate.parse_issue_key(input)
         }
     }
 }

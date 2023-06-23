@@ -2,15 +2,13 @@ use crate::data::{Action, CurrentWork, JiraIssue, Work};
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::time_relative::TimeRelative;
-use crate::parsing::{IssueParser, IssueParserWithRecent, JiraIssueParser};
+use crate::parsing::{IssueParser, IssueParserWithRecent};
 use crate::ui::clip_read::ClipRead;
 use crate::ui::Message;
 use crate::util::Timeline;
 use anyhow::anyhow;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::fmt::{write, Display, Formatter};
-use std::ops::Neg;
 
 /// UI model of the
 #[derive(Default, Debug)]
@@ -171,6 +169,18 @@ pub enum WTime {
     Empty,
 }
 
+impl std::fmt::Display for WTime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WTime::Last => f.write_str("last"),
+            WTime::Now => f.write_str("now"),
+            WTime::Empty => f.write_str(""),
+            WTime::Relative(r) => std::fmt::Display::fmt(r, f),
+            WTime::Time(t) => std::fmt::Display::fmt(t, f),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum IssueInput {
     Recent(JiraIssue),
@@ -203,8 +213,6 @@ impl From<Value> for Action {
         }
     }
 }
-
-
 
 pub fn time_input(input: &str) -> (bool, Option<Message>) {
     if input.contains(' ') {
