@@ -1,4 +1,5 @@
 use futures::StreamExt;
+use iced_core::Length;
 use iced_native::widget::text_input::Id;
 use iced_native::widget::{text_input, Column, Row};
 
@@ -38,13 +39,19 @@ impl IssueEndEdit {
         active_day: Option<&ActiveDay>,
     ) -> Box<IssueEndEdit> {
         let guard = settings.load();
-        let default_issue = active_day.and_then(|d| d.current_issue(guard.timeline.time_now()));
+        let default_issue = active_day
+            .as_ref()
+            .and_then(|d| d.current_issue(guard.timeline.time_now()));
 
-        let issue_id_text = default_issue.map(|e| e.ident.as_str()).unwrap_or("issue");
+        let issue_id_text = default_issue
+            .as_ref()
+            .map(|e| e.ident.as_str())
+            .unwrap_or_default();
         let description_text = default_issue
+            .as_ref()
             .and_then(|e| e.description.as_ref())
             .map(|e| e.as_str())
-            .unwrap_or("description");
+            .unwrap_or_default();
         Box::new(Self {
             top_bar: TopBar {
                 title: "End issue:",
@@ -52,11 +59,11 @@ impl IssueEndEdit {
                 info: day_info_message(active_day),
                 settings: settings.clone(),
             },
-            end_time: MyTextInput::new("now", |_| true).with_placeholder("end time"),
+            end_time: MyTextInput::new("", |_| true).with_placeholder("end time"),
             issue_id: MyTextInput::new(issue_id_text, |_| true).with_placeholder("issue id"),
-            message: MyTextInput::new("description", |_| true).with_placeholder("description"),
-            description: MyTextInput::new(                description_text,                |_| true,            )
-            .with_placeholder("description"),
+            message: MyTextInput::new(description_text, |_| true).with_placeholder("message"),
+            description: MyTextInput::new(description_text, |_| true)
+                .with_placeholder("description"),
             time: ParseResult::Valid(WTime::Time(guard.timeline.time_now())),
             settings,
             issue: ParseResult::None,
@@ -120,7 +127,12 @@ impl FocusableUi for IssueEndEdit {
 
 impl MainView for IssueEndEdit {
     fn view(&self) -> QElement {
-        let input = self.input.show("now");
+        let input = Row::with_children(vec![
+            self.end_time.show_text_input(Length::Units(200)).into(),
+            self.issue_id.show_text_input(Length::Units(300)).into(),
+            self.description.show_text_input(Length::Fill).into(),
+        ])
+        .spacing(style::SPACE_PX);
 
         let issue_text: String = if let ParseResult::Valid(i) = &self.issue {
             i.ident.clone()
@@ -174,7 +186,6 @@ pub(super) fn consume_input(
         .find(|e| e.id == id)
         .and_then(|f| f.accept_input(input))
 }
-
 
 #[cfg(test)]
 mod test {
