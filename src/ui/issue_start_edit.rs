@@ -6,6 +6,7 @@ use crate::data::{ActiveDay, JiraIssue, RecentIssues, RecentIssuesRef, WorkStart
 use crate::parsing::parse_result::ParseResult;
 use crate::parsing::time::Time;
 use crate::parsing::{parse_issue_clipboard, IssueParser, IssueParserWithRecent};
+use crate::ui::book_single::nparsing;
 use crate::ui::book_single::nparsing::WTime;
 use crate::ui::clip_read::ClipRead;
 use crate::ui::my_text_input::MyTextInput;
@@ -32,6 +33,7 @@ pub struct IssueStartEdit {
     orig: Option<WorkStart>,
     last_end: Option<Time>,
     recent_issues: RecentIssuesRef,
+    has_input: Option<text_input::Id>,
 }
 
 const INPUT_ID: &str = "ISE01";
@@ -51,8 +53,8 @@ impl IssueStartEdit {
                 info: day_info_message(active_day),
                 settings: settings.clone(),
             },
-            start: MyTextInput::new("", |_| true).with_placeholder("start"),
-            id: MyTextInput::new("", |_| true).with_placeholder("key"),
+            start: MyTextInput::msg_aware("", nparsing::time_input).with_placeholder("start"),
+            id: MyTextInput::msg_aware("", nparsing::issue_input).with_placeholder("key"),
             comment: MyTextInput::new("", |_| true).with_placeholder("comment"),
             description: MyTextInput::new("", |_| true).with_placeholder("description"),
             builder: IssueStartBuilder::default(),
@@ -60,6 +62,7 @@ impl IssueStartEdit {
             orig: None,
             last_end,
             recent_issues,
+            has_input: None,
         })
     }
 
@@ -94,20 +97,43 @@ impl SingleEditUi<WorkStart> for IssueStartEdit {
         self.builder.try_build()
     }
 
+    //noinspection DuplicatedCode
     fn update_input(&mut self, id: text_input::Id, input: String) -> Option<Message> {
-        consume_input(
-            id,
-            input,
-            &mut [
-                &mut self.start,
-                &mut self.id,
-                &mut self.comment,
-                &mut self.description,
-            ],
-        );
+        let f = &self.has_input;
+        let text_follow_up = if self.start.id == id {
+            self.start.accept_input(input)
+        } else if self.id.id == id {
+            self.id.accept_input(input)
+        } else if self.comment.id == id {
+            self.comment.accept_input(input)
+        } else if self.description.id == id {
+            self.description.accept_input(input)
+        } else {
+            None
+        };
+
+        if text_follow_up.is_some() {
+            return text_follow_up;
+        }
+
+        if self.id.is_focused(f) || self.comment.id == id {
+            return Some(Message::FilterRecent(
+                self.id.text.as_str().into(),
+                self.comment.text.as_str().into(),
+            ));
+        }
+
         let settings = self.settings.load();
         let recent_issues = self.recent_issues.borrow();
-        self.builder.parse_input(&settings, self.last_end, &recent_issues, &self.start.text, &self.id.text, &self.comment.text, &self.description.text);
+        self.builder.parse_input(
+            &settings,
+            self.last_end,
+            &recent_issues,
+            &self.start.text,
+            &self.id.text,
+            &self.comment.text,
+            &self.description.text,
+        );
         self.follow_up()
     }
 }
@@ -167,6 +193,10 @@ impl MainView for IssueStartEdit {
             }
             Message::SubmitCurrent(stay_active) => self.on_submit(stay_active),
             Message::StoreSuccess(stay_active) => stay_active.on_main_view_store(),
+            Message::Focus(id) => {
+                self.has_input = Some(id);
+                None
+            }
             _ => None,
         }
     }

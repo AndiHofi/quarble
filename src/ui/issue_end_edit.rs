@@ -1,4 +1,3 @@
-use futures::StreamExt;
 use iced_core::Length;
 use iced_native::widget::text_input::Id;
 use iced_native::widget::{text_input, Column, Row};
@@ -6,8 +5,8 @@ use iced_native::widget::{text_input, Column, Row};
 use crate::conf::SettingsRef;
 use crate::data::{ActiveDay, JiraIssue, WorkEnd};
 use crate::parsing::parse_result::ParseResult;
-use crate::parsing::time::Time;
-use crate::parsing::{IssueParsed, IssueParser};
+use crate::parsing::IssueParser;
+use crate::ui::book_single::nparsing;
 use crate::ui::book_single::nparsing::WTime;
 use crate::ui::my_text_input::MyTextInput;
 use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
@@ -59,8 +58,9 @@ impl IssueEndEdit {
                 info: day_info_message(active_day),
                 settings: settings.clone(),
             },
-            end_time: MyTextInput::new("", |_| true).with_placeholder("end time"),
-            issue_id: MyTextInput::new(issue_id_text, |_| true).with_placeholder("issue id"),
+            end_time: MyTextInput::msg_aware("", nparsing::time_input).with_placeholder("end time"),
+            issue_id: MyTextInput::msg_aware(issue_id_text, nparsing::issue_input)
+                .with_placeholder("issue id"),
             message: MyTextInput::new(description_text, |_| true).with_placeholder("message"),
             description: MyTextInput::new(description_text, |_| true)
                 .with_placeholder("description"),

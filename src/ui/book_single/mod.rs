@@ -1,5 +1,4 @@
 use iced_core::Length;
-use iced_native::widget::text_input::{Action};
 use iced_native::widget::{Row, Text};
 use iced_winit::widget::{text_input, Column};
 
@@ -10,7 +9,6 @@ use crate::parsing::time::Time;
 use crate::parsing::IssueParserWithRecent;
 use crate::ui::book_single::nparsing::{IssueInput, ValidWorkData, WTime, WorkData};
 use crate::ui::clip_read::ClipRead;
-use crate::ui::focus_handler::FocusHandler;
 use crate::ui::my_text_input::MyTextInput;
 use crate::ui::single_edit_ui::{FocusableUi, SingleEditUi};
 use crate::ui::top_bar::TopBar;
@@ -237,13 +235,10 @@ impl BookSingleUI {
     }
 }
 
-
 impl MainView for BookSingleUI {
     fn view(&self) -> QElement {
         let input_line = Row::with_children(vec![
-            self.start
-                .show_text_input(Length::Units(60))
-                .into(),
+            self.start.show_text_input(Length::Units(60)).into(),
             h_space(style::SPACE),
             self.end.show_text_input(Length::Units(60)).into(),
             h_space(style::SPACE),
